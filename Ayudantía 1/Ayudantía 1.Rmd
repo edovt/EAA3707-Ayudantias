@@ -1,0 +1,301 @@
+---
+title: "Ayudantía 1 - ML para Negocios"
+date: "10 de agosto del 2022"
+output:
+  rmdformats::downcute:
+    self_contained: true
+    default_style: "light"
+    downcute_theme: "default"
+---
+
+<style type="text/css">
+.Wrap {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r setup, include=FALSE}
+## Global options
+knitr::opts_chunk$set(cache = TRUE)
+```
+
+# Introducción
+
+Bienvenid@s a la primera ayudantía de EAA3707 - Machine Learning para Negocios. Mi nombre es Eduardo Vásquez, actualmente en mi quinto año de la carrera de Estadística y seré el ayudante de este curso. Ante cualquier problema o consulta por favor escríbanme al correo evasquezt@uc.cl.
+
+La idea de este documento es mostrarles de manera rápida lo que usaremos durante el semestre, algunas instrucciones de instalación, así como algunos consejos.
+
+# ¿Qué usaremos durante el semestre?
+
+<center>
+![R, Python y Julia](https://i.morioh.com/210202/bba30ada.webp){height=500px width=900px}
+
+</center>
+
+El lenguaje de programación que utilizaremos será exclusivamente **R**. De todas maneras, todo lo que veamos de Machine Learning es fácilmente transferible a **Python**, a través de algunas librerías como **scikit-learn**, **numpy**, **pandas** y **matplotlib**.
+
+Yo les recomiendo que siempre traten de usar diferentes lenguajes de programación y no quedarse con alguno en específico. Es cierto que Python ahora es probablemente el lenguaje más popular para ML, pero las cosas cambian muy rápido en el mundo de la programación. En particular, es probable que algunos estén escuchando cada vez más del lenguaje [Julia](https://julialang.org/), y nada nos asegura que Julia no sea capaz de volverse el lenguaje más popular en algunos años.
+
+# R y RStudio (próximamente Posit)
+
+<center>
+![R y RStudio](http://sahirbhatnagar.com/EPIB607/inst/figures/Figure%205.1.png)
+
+</center>
+
+
+Para descargar e instalar **R** deben ir al siguiente [enlace](https://cran.dcc.uchile.cl/) y seguir las instrucciones dependiendo si usan Linux, Windows o macOS.
+
+Una vez instalado **R** es **muy** recomendado utilizar el IDE (Integrated Development Environment) **RStudio**. En este curso será necesario instalarlo, considerando que usaremos **RMarkdown** (veremos RMarkdown un poco más adelante). Para descargar **RStudio** deben ir al siguiente [enlace](https://www.rstudio.com/products/rstudio/download/#download)
+
+Es importante notar que recientemente la compañía RStudio decidió cambiar su nombre a **Posit**. La decisión está dada justamente porque quieren dar una mirada más amplia al análisis de datos, considerando diferentes lenguajes de programación, y no enfocarse principalmente en R. Para más información pueden ver la [página oficial](https://posit.co/)
+
+## Recursos adicionales y recomendaciones
+
+* Para recordar cosas básicas de R, les recomiendo el libro [Hands-On Programming with R](https://rstudio-education.github.io/hopr/) de Garret Grolemund
+
+* En el caso que quieran aprender cosas avanzadas de R (lo cual recomiendo solo en el caso que tengan que realizar cosas complejas en R), o cómo funciona el lenguaje por detrás, recomiendo el libro [Advanced R](https://adv-r.hadley.nz/) de Hadley Wickham.
+
+* **Para los que ya se manejan con RStudio**: recomiendo que utilicen fonts con ligaduras como [Fira Code](https://github.com/tonsky/FiraCode) o el que utiliza PyCharm ([JetBrains Mono](https://www.jetbrains.com/lp/mono/)).
+
+```{r codigo prueba, include=FALSE}
+# Ligadura < + -
+aux <- seq(1, 10)
+
+# Ligadura < + =
+1 <= 2
+
+# Ligadura ! + =
+2 != 3
+```
+
+# RMarkdown
+
+<center>
+![RMarkdown](https://bookdown.org/yihui/rmarkdown/images/hex-rmarkdown.png){height=500px width=500px}
+</center>
+
+RMarkdown es un paquete de R creado por Yihui Xie que permite crear documentos dinámicos con (principalmente) código de R. De cierta manera estos documentos son muy parecidos a los Jupyter Notebooks, pero se pueden hacer un poco más atractivos estéticamente. De manera principal, los documentos están escritos en el lenguaje markup [Markdown](https://www.markdownguide.org/cheat-sheet/), en el cual se van interlazando bloques de código.
+
+Lo potente de RMarkdown es que permite crear diferentes tipos de archivos a partir del mismo documento (para algunos tipos hay que cambiar algunas cosas menores), como HTML, PDF, MS Word, presentaciones como Beamer y HTML5 Slides. No solo eso, sino que también permite crear libros, tableros e incluso páginas (la mayoría de las páginas de los paquetes de R modernos están hechas en RMarkdown)
+
+Por ejemplo, este documento fue justamente creado a partir de un archivo RMarkdown. Para utilizar el paquete simplemente deben instalarlo (rmarkdown)
+
+**Nota**: Para crear archivos PDF es necesario que tengan instalado LaTeX. Si no lo tienen instalado les recomiendo mejor instalar el paquete [tinytex](https://yihui.org/tinytex/) de Yihui, que soluciona este problema instalando una versión ligera con lo justo y necesario. En caso que requieran algunos paquetes en específico de LaTeX también permite instalarlos.
+
+**Nota**: Si desean compilar este archivo, deben instalar el paquete **rmdformats**, el cual trae algunos temas para documentos HTML más atractivos visualmente.
+
+**Nota**: RMarkdown permite el uso e interacción entre código de R y Python utilizando el paquete *reticulate*, que permite incluso intercambiar las variables de un lenguaje a otro. Ahora, en conjunto con el anuncio del cambio de RStudio a Posit, se presentó también [Quarto](https://quarto.org/), que funciona de la misma manera que RMarkdown, pero es mucho más sencillo integrar diferentes lenguajes como R, Python y Julia dentro del mismo documento.
+
+## Recursos adicionales
+
+* Para ver ejemplos creados utilizando RMarkdown pueden entrar a la galería que está en la [página principal](https://rmarkdown.rstudio.com/gallery.html).
+* Para aprender o conocer de manera simple las cosas posibles utilizando esta librería está el libro [R Markdown Cookbook](https://bookdown.org/yihui/rmarkdown-cookbook/) de Yihui Xie, Christophe Dervieux y Emily Riederer.
+* Para aprender más en profundidad las cosas posibles utilizando esta librería está el libro [R Markdown: The Definite Guide](https://bookdown.org/yihui/rmarkdown/) de Yihui Xie, J. J. Allaire y Garrett Grolemund.
+
+# Tidyverse
+
+<center>
+![Tidyverse y sus paquetes principales](https://uopsych-r-bootcamp-2020.netlify.app/slides/images/tidyverse_packages.png)
+</center>
+
+Como vieron en clases, **Tidyverse** es una colección de paquetes, con una filosofía y gramática común, orientados a la manipulación, importación, exploración y visualización de datos utilizada exhaustivamente en ciencia de datos.
+
+Para utilizar los paquetes, deben ejecutar:
+
+```{r tidyverse}
+library(tidyverse)
+```
+
+**Nota**: si solo desean ocupar algún o algunos de los paquetes de tidyverse los pueden cargar por separado, como por ejemplo `library(ggplot2)`.
+
+Para mostrar algunas de las cosas importantes de los paquetes que componen el tidyverse, utilizaremos la base `oro.csv` disponible en Canvas. Esta base de datos contiene información diaria relacionada al valor de transacción del oro en el mercado, entre el 15 de diciembre de 2011 y el 31 de diciembre de 2018, así como el precio del petróleo, índice S&P500, índice Dow Jones, bonos a 10 años del gobierno estadounidense, etc.
+
+## readr
+
+Todo análisis de datos inicia con la componente más importante: los datos. Para esto, necesitamos entonces herramientas que nos permitan cargar diferentes bases de datos a R de manera rápida y sin problemas.
+
+El paquete que tidyverse nos ofrece para esto es **readr**, el cual nos permite la lectura de datos tabulares de texto plano. Para esto, nos entrega diferentes funciones, las cuales comienzan con el prefijo `read_`, como por ejemplo `read_csv` que nos permite leer archivos separados por comas:
+
+```{r uso readr}
+# Cargamos los datos
+datos_oro <- readr::read_csv('oro.csv')
+
+# Vemos el tipo de objeto
+class(datos_oro)
+```
+
+```{r uso readr 2, include=FALSE}
+# datos_oro <- readr::read_csv('Ayudantía 1/oro.csv')
+# View(datos_oro)
+```
+
+**Nota**: para otros tipos de datos o archivos como archivos excel, datos de SPSS, Stata o SAS, tidyverse ofrece otros paquetes adicionales que pueden revisar [acá](https://www.tidyverse.org/packages/#import)
+
+## tibble
+
+Como vimos en la parte de readr, los datos cargados están en un objeto de la clase `tbl` además de `data.frame`. Es importante entonces recordar que los data frames son la forma de guardar datos tabulares en R, y lo nuevo acá es la parte de **tibble**, que le entrega ciertas funcionalidades y cambia algunas cosas al data frame.
+
+La mayoría de funciones de tidyverse funcionan con data frames, pero siempre será mejor trabajar por defecto con tibbles. A continuación cargaremos la misma base de datos usando R base, y la cambiaremos a tibble.
+
+```{r uso tibble}
+# Cargamos los datos con R base
+datos_oro_df <- read.csv('oro.csv')
+
+# Vemos el tipo de objeto
+class(datos_oro_df)
+
+# Cambiamos a tibble
+datos_oro <- tibble::as_tibble(datos_oro_df)
+
+# Vemos los datos
+datos_oro
+
+# Vemos el tipo de objeto
+class(datos_oro)
+```
+
+```{r uso tibble 2, include=FALSE}
+# # Cargamos los datos con R base
+# datos_oro_df <- read.csv('Ayudantía 1/oro.csv')
+# 
+# # Vemos los datos
+# datos_oro_df
+# 
+# # Vemos el tipo de objeto
+# class(datos_oro_df)
+# 
+# # Cambiamos a tibble
+# datos_oro <- tibble::as_tibble(datos_oro_df)
+# 
+# # Vemos los datos nuevamente
+# datos_oro
+# 
+# # Vemos el tipo de objeto
+# class(datos_oro)
+```
+
+**Nota**: ahora que ya saben la importancia de las tibbles y como pasar un data frame a este tipo de objeto, les recomiendo ver la librería [rio](https://cloud.r-project.org/web/packages/rio/index.html), que permite cargar diferentes tipos de archivos a través de un solo comando. Luego de cargar los datos, recomiendo entonces pasarlos a un tibble.
+
+## tidyr
+
+Como se mencionó en clases, tidyverse utiliza la filosofía que los datos deben estar (hay excepciones a la regla) en un formato *tidy*, lo cual se refiere a:
+
+1. Cada variable tiene su propia columna
+2. Cada observación tiene su propia fila
+3. Cada valor tiene su propia celda
+
+El paquete **tidyr** nos permite arreglar bases de datos (también permite hacer el proceso inverso) para que cumplan estos tres puntos. De momento no es necesario ver algún ejemplo, pero es probable que alguna de las bases que usaremos durante el semestre tenga que ser manipulada parcialmente antes de ser utilizada.
+
+**Nota**: para entender más en profundidad el concepto de *tidy* les recomiendo que lean el paper de Hadley Wickham [Tidy Data](https://www.jstatsoft.org/article/view/v059i10) en el Journal of Statistical Software.
+
+## dplyr
+
+Una vez teniendo nuestros datos ordenados y listos para usar, una de las tareas más comunes será la de manipular los datos, lo cual va desde crear nuevas columnas a filtrar filas de acuerdo a alguna regla.
+
+Antes de pasar a ver las funcionalidades del paquete, es importante presentar acá el **operador pipe** `%>%`, el cual es implementado en la librería `magrittr` (esta librería se carga con el tidyverse). La funcionalidad es bastante simple, y es que permite entregar el resultado de alguna expresión en la siguiente como el primer argumento. Esto se entenderá mejor con un ejemplo:
+
+```{r funcionamiento pipe}
+# Sin usar pipe
+aux <- subset(datos_oro, Open >= 155)
+mean(aux$High)
+
+# Usando pipe
+datos_oro %>% 
+  subset(Open >= 155) %>% 
+  .$High %>% 
+  mean()
+```
+
+Así, se tiene que, por ejemplo, `x %>% f` es equivalente a `f(x)` y `x %>% f(y)` es equivalente a `f(x, y)`.
+
+**Nota**: en RStudio está el shortcut `Ctrl + Shift + M` para escribir automáticamente el operador pipe.
+
+**Nota**: la versión base de R implementó su propio operador pipe `|>` desde la versión 4.1. La funcionalidad de ambos es similar, pero tienen algunas diferencias importantes. Nosotros seguiremos ocupando el operador de `magrittr`. 
+
+Dplyr nos entrega un conjunto de verbos que nos permite resolver algunos de los problemas en manipulación de datos:
+
+* **Mutar** (`mutate()`): crear nuevas variables que son funciones de variables ya existentes.
+* **Seleccionar** (`select()`): seleccionar variables según el nombre
+* **Filtrar** (`filter()`): seleccionar observaciones basado en sus valores
+* **Resumir** (`summarise()`): reducir multiples valores en estadísticos más simples
+* **Ordenar** (`arrange()`): cambiar el orden de las observaciones
+
+Así, podemos ver algunos ejemplos con cada uno de estos verbos:
+
+```{r ejemplos dplyr}
+## Seleccionar
+# Queremos solo algunas variables
+datos_oro_ex <- datos_oro %>% 
+  dplyr::select(Date, Open, High, Low, Close, Adj.Close, Volume)
+datos_oro_ex
+
+## Mutar
+# Creamos una variable que sea la diferencia de High con Low
+datos_oro_ex <- datos_oro_ex %>% 
+  dplyr::mutate(Spread = High - Low)
+datos_oro_ex
+
+## Filtrar
+# Nos quedamos solo con observaciones de Spread > 1.5
+datos_oro_ex <- datos_oro_ex %>% 
+  dplyr::filter(Spread > 1.5)
+datos_oro_ex
+
+## Resumir
+# Promedio de Open y número de observaciones
+datos_oro_ex %>% 
+  dplyr::summarise(media_open = mean(Open), n_obs = n())
+
+## Ordenar
+# Ordenamos según Spread de menor a mayor
+datos_oro_ex <- datos_oro_ex %>% 
+  dplyr::arrange(Spread)
+datos_oro_ex
+
+## Ahora todo junto (sin el resumen)
+datos_oro_ex <- datos_oro %>% 
+  dplyr::select(Date, Open, High, Low, Close, Adj.Close, Volume) %>% 
+  dplyr::mutate(Spread = High - Low) %>% 
+  dplyr::filter(Spread > 1.5) %>% 
+  dplyr::arrange(Spread)
+datos_oro_ex
+```
+
+## ggplot2
+
+Esta librería es la que utilizaremos para crear gráficos a partir de los datos que trabajemos. La forma en que funciona esta librería es bastante intuitiva, donde pueden pensar en un gráfico partiendo de un canvas vacío, para ir agregándole gráficas por capas, asignando variables a las componentes del gráfico.
+
+En este corto tiempo es complejo explicar todo el funcionamiento de esta librería, por lo que mejor en esta sección les recomiendo que lean el [capítulo dedicado a visualización](https://r4ds.had.co.nz/data-visualisation.html) del libro R for Data Science.
+
+Por otro lado, si quieren entender más en profundidad la forma en que funciona ggplot2 les recomiendo que lean el paper de Hadley Wickham [A Layered Grammar of Graphics](https://vita.had.co.nz/papers/layered-grammar.html)
+
+**Nota**: Una de las grandes ventajas de ggplot2 es que existen bastantes librerías que la extienden con nuevos tipos de gráficos, temas y funcionalidades. Por ejemplo, las que más ocupo son [patchwork](https://github.com/thomasp85/patchwork#patchwork) que permite componer fácilmente varias figuras en una sola y [GGally](https://ggobi.github.io/ggally/). Pueden ver la gran mayoría de extensiones [acá](https://exts.ggplot2.tidyverse.org/gallery/).
+
+**Nota**: En caso que estén aburridos de tener que programar a mano los gráficos, pueden usar el add-in [Esquisse](https://dreamrs.github.io/esquisse/) que permite crear los gráficos interactivamente, entregando el código automáticamente. Recomiendo que partan programando a mano los gráficos para así familiarizarse con los comandos, y luego comenzar a usar esquisse.
+
+## forcats, stringr y purrr
+
+Por último, nos quedan estas tres librerías del tidyverse. No entraremos en detalles de ellas ya que son para tareas más específicas.
+
+En particular, `forcats` permite manipular variables de tipo factor, `stringr` permite manipular variables tipo string, y `purrr` contiene herramientas de programación funcional. Por ejemplo, purrr implementa algunas funciones más intuitivas para aplicar alguna expresión a cada observación o variable, reemplazando a las funciones `apply`, `lapply`, `vapply` y `sapply` de R base.
+
+## Recursos adicionales
+
+* Para aprender un poco más en profundidad acerca de los paquetes de tidyverse está el libro [R for Data Science](https://r4ds.had.co.nz/) de Hadley Wickham y Garrett Grolemund. Para quienes lo deseen, está también la versión en español [R para Ciencia de Datos](https://es.r4ds.hadley.nz/), la cual fue coordinada por [Riva Quiroga](https://github.com/rivaquiroga)
+
+* Les recomiendo tener siempre a mano las Cheatsheets de las librerías que más utilicen. Estas las pueden encontrar en la [página de RStudio](https://www.rstudio.com/resources/cheatsheets/)
+
+* Finalmente, no se preocupen si creen que son muchas cosas que aprender en poco tiempo. La mejor forma de aprender y reforzar estos conocimientos es simplemente seguir programando.
+
+# Tidymodels
+
+<center>
+![Tidymodels y sus paquetes principales](https://mine-cetinkaya-rundel.github.io/fm-speeches-covid19/venues/edi-rladies-edinbr/img/tidymodels-packages.png)
+</center>
+
+Como se mencionó en clases, **Tidymodels** se creó con el objetivo de unificar las librerías de Machine Learning en R, las cuales se encontraban dispersas y con formas de funcionar diferentes. Además, se busca poder integrar los principios que rigen al **tidyverse** que vimos anteriormente.
+
+Por ahora no tiene sentido hablar del funcionamiento de tidymodels, ya que es justamente lo que veremos durante el semestre.

@@ -2044,161 +2044,22 @@ time_kfold &lt;- system.time(
   wf %&gt;% add_model(tune_spec),
   resamples = precios_cv,
   grid = lambda_grid
-))</code></pre>
-<pre><code>## ! Fold01: internal: A correlation computation is required, but `estimate` is constant and ha...</code></pre>
-<pre><code>## ! Fold02: internal: A correlation computation is required, but `estimate` is constant and ha...</code></pre>
-<pre><code>## ! Fold03: internal: A correlation computation is required, but `estimate` is constant and ha...</code></pre>
-<pre><code>## ! Fold04: internal: A correlation computation is required, but `estimate` is constant and ha...</code></pre>
-<pre><code>## ! Fold05: internal: A correlation computation is required, but `estimate` is constant and ha...</code></pre>
-<pre><code>## ! Fold06: internal: A correlation computation is required, but `estimate` is constant and ha...</code></pre>
-<pre><code>## ! Fold07: internal: A correlation computation is required, but `estimate` is constant and ha...</code></pre>
-<pre><code>## ! Fold08: internal: A correlation computation is required, but `estimate` is constant and ha...</code></pre>
-<pre><code>## ! Fold09: internal: A correlation computation is required, but `estimate` is constant and ha...</code></pre>
-<pre><code>## ! Fold10: internal: A correlation computation is required, but `estimate` is constant and ha...</code></pre>
-<pre class="r"><code>time_kfold</code></pre>
+))
+
+time_kfold</code></pre>
 <pre><code>##    user  system elapsed 
-##   4.997   0.004   5.008</code></pre>
+##   6.098   0.035   6.215</code></pre>
 <pre class="r"><code># Vemos el tiempo de loocv
 time_loocv &lt;- system.time(
   lasso_grid &lt;- tune::tune_grid(
   wf %&gt;% add_model(tune_spec),
   resamples = precios_loocv,
   grid = lambda_grid
-))</code></pre>
-<pre><code>## ! Fold001: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold002: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold003: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold004: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold005: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold006: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold007: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold008: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold009: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold010: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold011: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold012: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold013: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold014: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold015: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold016: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold017: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold018: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold019: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold020: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold021: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold022: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold023: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold024: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold025: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold026: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold027: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold028: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold029: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold030: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold031: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold032: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold033: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold034: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold035: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold036: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold037: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold038: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold039: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold040: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold041: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold042: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold043: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold044: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold045: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold046: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold047: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold048: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold049: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold050: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold051: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold052: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold053: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold054: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold055: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold056: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold057: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold058: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold059: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold060: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold061: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold062: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold063: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold064: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold065: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold066: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold067: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold068: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold069: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold070: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold071: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold072: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold073: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold074: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold075: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold076: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold077: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold078: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold079: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold080: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold081: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold082: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold083: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold084: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold085: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold086: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold087: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold088: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold089: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold090: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold091: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold092: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold093: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold094: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold095: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold096: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold097: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold098: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold099: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold100: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold101: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold102: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold103: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold104: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold105: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold106: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold107: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold108: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold109: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold110: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold111: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold112: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold113: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold114: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold115: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold116: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold117: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold118: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold119: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold120: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold121: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold122: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold123: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold124: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold125: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold126: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold127: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold128: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold129: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold130: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre><code>## ! Fold131: internal: A correlation computation is required, but the inputs are size zero or o...</code></pre>
-<pre class="r"><code>time_loocv</code></pre>
+))
+
+time_loocv</code></pre>
 <pre><code>##    user  system elapsed 
-##  71.753   0.300  72.149</code></pre>
+##  84.084   0.631  85.009</code></pre>
 </div>
 </div>
 <div id="discusión-remuestreo-en-series-de-tiempo" class="section level1">

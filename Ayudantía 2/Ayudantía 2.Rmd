@@ -426,7 +426,7 @@ Por último, para entender un poco los drawbacks de los valores de $k$ en el k-f
 
 **Nota**: el comando `loo_cv()` no funciona al usar `tune()`, pero esto se arregla fácilmente considerando $k=n$. 
 
-```{r comparación tiempos}
+```{r comparación tiempos, message=FALSE}
 precios_cv <- rsample::vfold_cv(precios_train)
 
 loocv_k <- nrow(precios_train)

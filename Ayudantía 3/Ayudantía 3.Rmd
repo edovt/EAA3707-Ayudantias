@@ -1,0 +1,462 @@
+---
+title: "Ayudantía 3 - ML para Negocios"
+date: "24 de agosto del 2022"
+output:
+  rmdformats::downcute:
+    self_contained: true
+    default_style: "light"
+    downcute_theme: "default"
+---
+
+<style type="text/css">
+.Wrap {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+```{r setup, include=FALSE}
+## Global options
+knitr::opts_chunk$set(cache = TRUE)
+```
+
+# Introducción
+
+Bienvenid@s a la tercera ayudantía de EAA3707 - Machine Learning para Negocios, con respecto a la materia de Regresión Logística. En la ayudantía veremos:
+
+1. ¿Para qué necesitamos dividir los datos?
+
+2. ¿Para qué necesitamos resamplear los datos? 
+
+3. Discusión: remuestreo en series de tiempo
+
+Antes de comenzar, cargamos las librerías que utilizaremos durante la ayudantía. La librería `gapminder` contiene un extracto de la base de datos [Gapminder](https://www.gapminder.org/data/), la cual combina datos de múltiples fuentes sobre diferentes variables de cada país. Entre las variables se encuentran:
+
+- Tasa de fertilidad total
+- Tasa de mortalidad infantil
+- PIB per cápita
+- Índice de Gini
+- Esperanza de Vida
+
+Por otro lado, la librería `tseries` permite descargar fácilmente datos financieros.
+
+```{r librerias, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(tidymodels)
+
+library(gapminder)
+library(tseries)
+
+library(glmnet)
+
+
+# Para obtener resultados reproducibles
+set.seed(912)
+```
+
+Además, les recuerdo los libros que les recomiendo para aprender de R:
+
+- **Hands-On Programming with R**: disponible [acá](https://rstudio-education.github.io/hopr/). Útil para recordar cosas básicas de R.
+
+- **Advanced R**: disponible [acá](https://adv-r.hadley.nz/). Para aprender R avanzado (realmente avanzado), si es que están interesados en entender cómo funciona R por detrás.
+
+- **R for Data Science**: disponible [acá](https://r4ds.had.co.nz/). Bueno para aprender y aplicar Data Science de manera rápida, además de ser uno de los libros guía para aprender acerca de los paquetes de tidyverse.
+
+- **RMarkdown Cookbook**: disponible [acá](https://bookdown.org/yihui/rmarkdown-cookbook/). Útil para aprender lo básico de RMarkdown.
+
+- **RMarkdown: The Definitive Guide**: disponible [acá](https://bookdown.org/yihui/rmarkdown/). Útil para aprender cosas avanzadas de RMarkdown.
+
+- **Tidy Modeling with R**: disponible [acá](https://www.tmwr.org/). Recomendado para aprender del ecosistema tidymodels. Tiene también un capítulo pequeño de tidyverse con lo justo y necesario.
+
+# ¿Para qué necesitamos dividir los datos?
+
+<center>
+![Data split](https://miro.medium.com/max/1838/1*pJ5jQHPfHDyuJa4-7LR11Q.png)
+
+</center>
+
+En Machine Learning y Aprendizaje Estadístico el análisis y modelamiento de los datos no termina en el momento que se ajusta el modelo. En particular, todo análisis de datos tendrá (o debería tener) algún propósito en específico.
+
+Dentro de estos propósitos se encuentran dos importantes. El primer propósito sería el de poder **predecir** con precisión el comportamiento de una observación futura, como por ejemplo nos interesa saber qué tan probable será que una persona, con sus características propias, nos pagará un crédito antes de entregárselo. Por otro lado, también se encuentra el propósito de poder **describir o formar relaciones** entre nuestros datos, como por ejemplo formar grupos de clientes con comportamientos similares, y así poder hacer campañas de marketing que se adecúen a cada uno de ellos.
+
+**Nota**: dentro de los propósitos también hay uno de **inferencia**, pero en este curso no entraremos demasiado en éste.
+
+Con respecto al propósito de predicción existen muchos modelos, dependiendo por ejemplo de la naturaleza de las covariables o la variable de interés, la cual, por ejemplo, podría ser categórica o numérica. Por esta razón, nos interesa buscar formas de poder comparar entre estos modelos, y que así nos ayude a elegir el "mejor" modelo.
+
+Ahora, no solo debemos preocuparnos de la existencia de diferentes modelos diferentes, sino que dentro de cada modelo pueden existir hiperparámetros que cambian algunas características y comportamientos del modelo. Por ejemplo, podemos ajustar un modelo de regresión múltiple polinomial y tener que elegir el grado que éste tendrá.
+
+**¿Cuál es el problema entonces?** muchos modelos tratan de justamente minimizar algún criterio de precisión, como puede ser el Error Cuadrático Medio (ECM) en un modelo de regresión ajustado por mínimos cuadrados. Así, no tendría sentido utilizar dos veces los mismos datos, tanto para ajustar como para medir qué tan bueno es el poder de predicción.
+
+**¿Cómo arreglamos este problema?** la mejor forma de poder superar este problema es obtener nuevos datos y ver qué tan bueno es el modelo en la predicción. Lamentablemente, esto puede ser muy costoso o puede tardar mucho tiempo, como sería por ejemplo esperar que a nuevos pacientes les de la enfermedad de estudio.
+
+Así, la forma de arreglar este problema es separar los datos en una base de **entrenamiento** y una de **test**, donde la primera se utiliza para ajustar el modelo y la segunda para evaluar el modelo ajustado.
+
+## Ejemplo
+
+Veamos un ejemplo utilizando la librería `gapminder`. Supongamos que nos interesa estudiar la relación entre la esperanza de vida y el PIB en Chile (¿cuál de las variables cree que sería mejor utilizar como predictor?). En el código a continuación se realiza este filtrado y se crea un gráfico para explorar lo pedido.
+
+```{r relacion le y pib en Chile}
+# Los datos están en el tibble gapminder
+datos_chile <- gapminder::gapminder %>% 
+  dplyr::filter(country == 'Chile')
+
+# Creamos el gráfico
+ggplot(data = datos_chile,
+       mapping = aes(x = gdpPercap, y = lifeExp)) +
+  geom_point(size = 7) +
+  labs(x = 'PIB per cápita', y = 'Esperanza de vida',
+       title = 'Relación esperanza de vida y PIB per cápita',
+       subtitle = 'Datos temporales de Chile')
+```
+
+A partir del gráfico parece ser que la relación entre ambas variables es no lineal, donde quizás sea mejor un modelo cuadrático. Para ver el efecto de utilizar la misma base para entrenar y testear podemos ver en primer lugar cómo ajusta el modelo dependiendo del grado del polinomio:
+
+```{r ajuste polinomios}
+# Ajustamos el mismo modelo pero para grados de polinomio diferentes
+ggplot(data = datos_chile,
+       mapping = aes(x = gdpPercap, y = lifeExp)) +
+  geom_point(size = 5) +
+  stat_smooth(method = 'lm', se = FALSE, col = 'tomato',
+              formula = y ~ x) +
+  stat_smooth(method = 'lm', se = FALSE, col = 'blue',
+              formula = y ~ poly(x, 2, raw = TRUE)) +
+  stat_smooth(method = 'lm', se = FALSE, col = 'green',
+              formula = y ~ poly(x, 5, raw = TRUE)) +
+  stat_smooth(method = 'lm', se = FALSE, col = 'orange',
+              formula = y ~ poly(x, 7, raw = TRUE)) +
+  labs(x = 'PIB per cápita', y = 'Esperanza de vida',
+       title = 'Ajustes esperanza de vida vs PIB per cápita',
+       subtitle = 'Datos temporales de Chile')
+```
+
+Vemos que a medida que aumenta el grado del polinomio, el modelo se asemeja cada vez más a los datos. Esto es lo que se denomina el problema de **overfitting**, en donde el modelo no solo trata de explicar la variabilidad real de la asociación, sino que también el ruido inherente.
+
+Así, veamos cómo se comporta el ECM a medida que aumenta el grado del polinomio:
+
+```{r ecm polinomios train}
+# Ajustamos el modelo de regresión lineal hasta grado 6
+lm_g1 <- lm(lifeExp ~ gdpPercap, datos_chile)
+lm_g2 <- lm(lifeExp ~ poly(gdpPercap, 2), datos_chile)
+lm_g3 <- lm(lifeExp ~ poly(gdpPercap, 3), datos_chile)
+lm_g4 <- lm(lifeExp ~ poly(gdpPercap, 4), datos_chile)
+lm_g5 <- lm(lifeExp ~ poly(gdpPercap, 5), datos_chile)
+lm_g6 <- lm(lifeExp ~ poly(gdpPercap, 6), datos_chile)
+
+# Obtenemos los ECM
+ecm_g1 <- mean(lm_g1$residuals^2)
+ecm_g2 <- mean(lm_g2$residuals^2)
+ecm_g3 <- mean(lm_g3$residuals^2)
+ecm_g4 <- mean(lm_g4$residuals^2)
+ecm_g5 <- mean(lm_g5$residuals^2)
+ecm_g6 <- mean(lm_g6$residuals^2)
+
+# Guardamos los resultados en un tibble
+tibble_ecm <- tibble(grado_pol = 1:6,
+                     ECM = c(ecm_g1, ecm_g2, ecm_g3,
+                             ecm_g4, ecm_g5, ecm_g6))
+
+# Graficamos
+ggplot(tibble_ecm, mapping = aes(x = grado_pol, y = ECM)) +
+  geom_line(col = 'turquoise', lwd = 1.5) +
+  geom_point() +
+  labs(x = 'Grado del polinomio',
+       title = 'Evolución del ECM según el grado del polinomio')
+```
+
+Notamos que efectivamente el ECM disminuye, pero, ¿es esto indicativo de qué tan bueno será el modelo para datos no observados?
+
+Consideremos entonces la separación de los datos en una base de entrenamiento y otra de test. Para esto, utilizaremos la librería `rsample` perteneciente al ecosistema `tidymodels`. Para lo que nos interesa, esta librería nos entrega las funciones `initial_split()`, `training()` y `testing()`. La primera nos entrega información acerca de cómo separar los datos, mientras que las otras dos son las que realmente separan los datos. Una vez realizada la separación repetimos lo anterior pero ahora evaluamos el ECM usando la base de testeo.
+
+**Nota**: para obtener información de algún paquete siempre recomiendo que visiten la página de éste (si es que tiene). En este caso, la página es [esta](https://rsample.tidymodels.org/index.html).
+
+```{r separacion datos}
+# Hacemos la separación de los datos
+info_split <- rsample::initial_split(data = datos_chile)
+info_split
+class(info_split)
+
+# Extraemos los datos
+datos_train <- rsample::training(info_split)
+datos_test <- rsample::testing(info_split)
+```
+
+```{r ecm polinomios test}
+# Ajustamos el modelo de regresión lineal hasta grado 6
+lm_g1 <- lm(lifeExp ~ gdpPercap, datos_train)
+lm_g2 <- lm(lifeExp ~ poly(gdpPercap, 2), datos_train)
+lm_g3 <- lm(lifeExp ~ poly(gdpPercap, 3), datos_train)
+lm_g4 <- lm(lifeExp ~ poly(gdpPercap, 4), datos_train)
+lm_g5 <- lm(lifeExp ~ poly(gdpPercap, 5), datos_train)
+lm_g6 <- lm(lifeExp ~ poly(gdpPercap, 6), datos_train)
+
+# Obtenemos los ECM
+aux_ecm <- function(modelo){
+  gdp_test <- datos_test$gdpPercap
+  lifeexp_test <- datos_test$lifeExp
+  prediccion <- predict(modelo,
+                        data.frame(gdpPercap = gdp_test))
+  ecm <- mean((prediccion - lifeexp_test)^2)
+  
+  return(ecm)
+}
+
+ecm_test_g1 <- aux_ecm(lm_g1)
+ecm_test_g2 <- aux_ecm(lm_g2)
+ecm_test_g3 <- aux_ecm(lm_g3)
+ecm_test_g4 <- aux_ecm(lm_g4)
+ecm_test_g5 <- aux_ecm(lm_g5)
+ecm_test_g6 <- aux_ecm(lm_g6)
+
+# Agregamos los ECM de test en el tibble anterior
+tibble_ecm$ECM_test <- c(ecm_test_g1, ecm_test_g2, ecm_test_g3,
+                         ecm_test_g4, ecm_test_g5, ecm_test_g6)
+
+# Graficamos
+ggplot(tibble_ecm, mapping = aes(x = grado_pol)) +
+  geom_line(aes(y = ECM), col = 'turquoise', lwd = 1.5) +
+  geom_point(aes(y = ECM)) +
+  geom_line(aes(y = ECM_test), col = 'salmon', lwd = 1.5) +
+  geom_point(aes(y = ECM_test)) +
+  scale_y_log10() +
+  labs(x = 'Grado del polinomio',
+       title = 'Evolución del ECM según el grado del polinomio')
+```
+
+Vemos entonces que efectivamente los modelos de grado mayor no tienen un buen poder de predicción para datos nuevos. En este caso pareciera ser que un modelo polinomial de menor grado tiene mejor poder de predicción.
+
+# ¿Por qué necesitamos resamplear los datos?
+
+Una vez separados los datos en una base de entrenamiento y una de test nos interesa poder definir, para algunos modelos, los hiperparámetros óptimos, para luego evaluar el performance del modelo en la base de test. Por ejemplo, el mismo ejemplo anterior utilizaba la base de test para elegir el grado del polinomio en la regresión.
+
+En particular, nos interesan métodos que permitan obtener métricas que sean buenos estimadores del valor que se obtendría al obtener nuevos datos. Estadísticamente, estamos hablando de por ejemplo obtener estimaciones insesgadas.
+
+Lo anterior se conoce como métodos de **resampling**, los cuales son aplicados a la **base de entrenamiento**, para así poder elegir el modelo óptimo que finalmente será puesto a prueba con la base de test. Entre los métodos que vieron en clases se encuentran:
+
+1. K-fold Cross-Validation
+2. Leave-one-out Cross-Validation: caso especial de K-fold donde k=n, con $n$ el número de observaciones.
+3. Monte Carlo Cross-Validation
+4. Bootstrap
+
+## Ejemplo
+
+Para ver un ejemplo de la aplicación de métodos de remuestreo, utilizaremos datos de tres compañías chilenas **BCI**, **Banco de Chile** y **Banco Santander - Chile**. Para esto, obtendremos datos mensuales de precios de acciones, de las tres empresas, desde el año 2008 al día de hoy.
+
+```{r datos copec ccu y santander, message=FALSE}
+# Obtenemos los precios ajustados
+# Obs: se entregan datos tipo zoo
+adj_prices_bci <- tseries::get.hist.quote(
+  instrument = 'BCI.SN',
+  start = '2008-02-01',
+  quote = 'AdjClose',
+  compression = 'm') %>% 
+  as.vector()
+
+adj_prices_bch <- tseries::get.hist.quote(
+  instrument = 'BCH',
+  start = '2008-02-01',
+  quote = 'AdjClose',
+  compression = 'm') %>% 
+  as.vector()
+
+adj_prices_sant <- tseries::get.hist.quote(
+  instrument = 'BSAC',
+  start = '2008-02-01',
+  quote = 'AdjClose',
+  compression = 'm') %>% 
+  as.vector()
+
+# Juntamos los datos en un tibble
+precios_chile <- tibble(
+  bci = adj_prices_bci,
+  bchile = adj_prices_bch,
+  bsantander = adj_prices_sant
+)
+
+# Vemos algunos de los datos
+precios_chile
+```
+
+Una vez descargados los datos, podemos ver en un gráfico de, por ejemplo, cómo se comportan de manera conjunta el precio del banco BCI y el Banco de Chile a través del tiempo:
+
+```{r serie precios}
+# Realizamos el gráfico
+ggplot(data = precios_chile,
+       mapping = aes(x = bci, y = bchile)) +
+  geom_point(size = 3, col = 'red', alpha = 0.6) +
+  labs(x = 'Precio ajustado BCI',
+       y = 'Precio ajustado Banco de Chile',
+       title = 'Relación precio BCI y Banco de Chile',
+       subtitle = 'Periodo 2008-2022')
+```
+
+Notamos que en este caso pareciera ser que existe una correlación positiva entre ambas empresas, lo cual tiene sentido considerando el rubro de ambas.
+
+Supongamos que deseamos ajustar un modelo de regresión LASSO. Este modelo se verá en profundidad durante el semestre, pero lo importante es que agrega un hiperparámetro de penalización $\lambda$. En particular, el modelo de regresión lineal simple trata de minimizar la suma de cuadrados (equivalentemente, el ECM), esto es
+
+$$
+\sum_{i=1}^n (y_i - \beta_0 - \beta_1 x_{1, i} - \beta_2x_{2, i})^2
+$$
+
+Ahora, el modelo LASSO desea encontrar los valores de $\beta_0$, $\beta_1$ y $\beta_2$ que minimizan:
+
+$$
+\sum_{i=1}^n (y_i - \beta_0 - \beta_1 x_{1, i} - \beta_2 x_{2, i})^2 + \lambda\sum_{j=0}^2 |\beta_j|
+$$
+
+esto es, se penaliza cuando se tienen valores de $\beta$ muy altos, llevándolos a 0.
+
+Una de las preguntas importantes cuando ajustemos este modelo es **¿qué valor de $\lambda$ deberíamos elegir?**. Podríamos por ejemplo elegir un valor fijo, pero esto sería una decisión arbitraria. La otra opción, que es la recomendada, es utilizar los datos de entrenamiento, de una manera inteligente, para obtener el valor óptimo del hiperparámetro.
+
+El código a continuación realiza lo pedido, utilizando validación cruzada, buscando el valor óptimo de este hiperparámetro. No se preocupen si aún no se entiende qué hace el código, ya que lo iremos viendo durante el semestre.
+
+```{r validacion cruzada lasso, message=FALSE}
+# Separamos los datos
+split_precios <- rsample::initial_split(precios_chile)
+precios_train <- rsample::training(split_precios)
+precios_test <- rsample::testing(split_precios)
+
+# Generamos los folds
+precios_cv <- rsample::vfold_cv(precios_train)
+precios_cv
+
+# Código del modelo, no es importante aún
+precios_rec <- 
+  recipes::recipe(bci ~ ., data = precios_train) %>% 
+  recipes::step_zv(all_numeric(), -all_outcomes()) %>% 
+  recipes::step_normalize(all_numeric(), -all_outcomes())
+
+tune_spec <-
+  parsnip::linear_reg(penalty = tune::tune(), mixture = 1) %>%
+  parsnip::set_engine('glmnet')
+
+lambda_grid <- dials::grid_regular(
+  penalty(range = c(-1, 5)),
+  levels = 50)
+
+wf <- workflow() %>% 
+  add_recipe(precios_rec)
+
+lasso_grid <- tune::tune_grid(
+  wf %>% add_model(tune_spec),
+  resamples = precios_cv,
+  grid = lambda_grid
+)
+
+lasso_grid %>% 
+  collect_metrics()
+```
+
+Una vez ajustado el modelo con diferentes valores de penalización, podemos ver la evolución del RMSE (la raiz del error cuadrático medio) en el siguiente gráfico.
+
+```{r grafico rmse lambda, echo=FALSE}
+lasso_grid %>%
+  collect_metrics() %>%
+  dplyr::filter(.metric == 'rmse') %>% 
+  ggplot(aes(penalty, mean, color = .metric)) +
+  geom_errorbar(aes(
+    ymin = mean - std_err,
+    ymax = mean + std_err
+  ),
+  alpha = 0.5
+  ) +
+  scale_y_log10() +
+  geom_line(size = 1.5) +
+  facet_wrap(~.metric, scales = "free", nrow = 2) +
+  scale_x_log10() +
+  theme(legend.position = "none")
+```
+
+Notemos que si queremos repetir lo anterior, solo debemos cambiar el método de resampling:
+
+```{r otro metodo resampling, message=FALSE}
+precios_bootstrap <- rsample::bootstraps(precios_train)
+
+lasso_grid <- tune::tune_grid(
+  wf %>% add_model(tune_spec),
+  resamples = precios_bootstrap,
+  grid = lambda_grid
+)
+
+lasso_grid %>% 
+  collect_metrics()
+```
+
+```{r grafico bootstrap, echo=FALSE}
+lasso_grid %>%
+  collect_metrics() %>%
+  dplyr::filter(.metric == 'rmse') %>% 
+  ggplot(aes(penalty, mean, color = .metric)) +
+  geom_errorbar(aes(
+    ymin = mean - std_err,
+    ymax = mean + std_err
+  ),
+  alpha = 0.5
+  ) +
+  scale_y_log10() +
+  geom_line(size = 1.5) +
+  facet_wrap(~.metric, scales = "free", nrow = 2) +
+  scale_x_log10() +
+  theme(legend.position = "none")
+```
+
+Finalmente, podemos recuperar el mejor hiperparámetro y ajustar el modelo con este valor.
+
+```{r mejor modelo lasso}
+lowest_rmse <- lasso_grid %>% 
+  tune::select_best('rmse')
+
+final_lasso <- finalize_workflow(
+  wf %>% add_model(tune_spec),
+  lowest_rmse
+)
+
+modelo_ajustado <- final_lasso %>% 
+  fit(precios_train) %>% 
+  extract_fit_parsnip() %>% 
+  tidy()
+
+last_fit(
+  final_lasso,
+  split_precios) %>% 
+  collect_metrics()
+```
+
+Por último, para entender un poco los drawbacks de los valores de $k$ en el k-fold, podemos tomar el tiempo de ajuste al considerar $k=10$, que es el valor por defecto en `vfold_cv()`, y $k=n$ que sería el LOOCV.
+
+**Nota**: el comando `loo_cv()` no funciona al usar `tune()`, pero esto se arregla fácilmente considerando $k=n$. 
+
+```{r comparación tiempos, message=FALSE}
+precios_cv <- rsample::vfold_cv(precios_train)
+
+loocv_k <- nrow(precios_train)
+precios_loocv <- rsample::vfold_cv(
+  data = precios_train,
+  v = loocv_k
+)
+
+# Vemos el tiempo de k-fold con k=10
+time_kfold <- system.time(
+  lasso_grid <- tune::tune_grid(
+  wf %>% add_model(tune_spec),
+  resamples = precios_cv,
+  grid = lambda_grid
+))
+
+time_kfold
+
+# Vemos el tiempo de loocv
+time_loocv <- system.time(
+  lasso_grid <- tune::tune_grid(
+  wf %>% add_model(tune_spec),
+  resamples = precios_loocv,
+  grid = lambda_grid
+))
+
+time_loocv
+```
+
+
+# Discusión: remuestreo en series de tiempo
+
+

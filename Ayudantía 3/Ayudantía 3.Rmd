@@ -21,9 +21,15 @@ body{
 </style>
 ```
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, message=FALSE}
+library(here)
+
+
 ## Global options
-knitr::opts_chunk$set(cache = TRUE)
+knitr::opts_chunk$set(cache = TRUE, root.dir = getwd())
+
+# Here
+here::i_am('Ayudantía 3/Ayudantía 3.Rmd')
 ```
 
 # Introducción
@@ -33,6 +39,9 @@ knitr::opts_chunk$set(cache = TRUE)
 1.  ¿Qué es el modelo de regresión logística?
     -   Algunas definiciones importantes
 2.  Ajuste de un modelo de regresión logística
+    - Datos a utilizar
+    - Análisis exploratorio
+    - Modelamiento
 3.  Test de hipótesis
 4.  Tablas de clasificación
 
@@ -123,7 +132,9 @@ y es justamente de acá que viene el nombre **regresión logística**. Podemos v
 ```{r function logistica, echo=FALSE}
 logistic <- function(x){exp(x)/(exp(x) + 1)}
 ggplot(data.frame(x = c(-10, 10)), aes(x = x)) + 
-  stat_function(fun = logistic, col = 'red', lwd = 2) +
+  stat_function(fun = logistic, col = 'red', lwd = 1) +
+  geom_hline(yintercept = c(0, 1), lty = 'dashed') +
+  ylim(-0.1, 1.1) +
   labs(title = 'Función logística')
 ```
 
@@ -204,7 +215,88 @@ es decir, lo que hace el modelo es modelar el logaritmo de las chances como una 
 
 # Ajuste de un modelo de regresión logística
 
-Pasemos ahora a la parte práctica. La base de datos `credit.data`
+## Datos a utilizar
+
+Pasemos ahora a la parte práctica. La base de datos `credit.data` contiene información crediticia de diferentes clientes de un banco alemán. En particular, la base de datos tiene información de 1000 clientes, con sus diferentes atributos, así como una variable que indica si la persona tiene un buen o mal riesgo crediticio.
+
+Carguemos en primer lugar la base de datos y echemos un vistazo rápido a los datos.
+
+```{r carga datos, message=FALSE}
+# Cargar datos con RStudio
+credit_full <- readr::read_table(
+  file = here::here('Ayudantía 3', 'german.data'), 
+  col_names = FALSE
+)
+
+# Vemos los primeros datos
+head(credit_full, 5)
+```
+
+A partir de lo anterior notamos que la base de datos viene sin nombres de las columnas, y que los valores vienen codificados en un formato que no sabemos a qué se refieren. En estos casos lo mejor es ver la fuente de los datos, que en este caso los obtuve del [Machine Learning Repository](https://archive-beta.ics.uci.edu/ml/datasets/statlog+german+credit+data) de la University of California, Irvine. De ahí obtenemos que las variables corresponden a, por ejemplo, el estado actual de la cuenta corriente, la duración en meses del crédito y el propósito del crédito.
+
+Para simplificar el análisis solo utilizaremos los atributos 2, 3, 5, 13, 15, 16 y obviamente nuestra variable respuesta. En el código a continuación realizamos esta selección y colocamos nombres explicativos. Cambiaré también la codificación de `housing`, pero solo para mostrar cómo se hace.
+
+```{r selección y nombres}
+credit <- credit_full %>% 
+  dplyr::select(X2, X3, X5, X13, X15, X16, X21) %>% 
+  dplyr::rename(
+    duration = X2,
+    credit_history = X3,
+    credit_amount = X5,
+    age = X13,
+    housing = X15,
+    n_credits = X16,
+    risk = X21) %>% 
+  dplyr::mutate(
+    housing = dplyr::recode(housing, 
+                            "A151" = 'rent',
+                            "A152" = 'own',
+                            "A153" = 'free')
+  )
+
+head(credit, 5)
+```
+
+Ya teniendo nuestros datos listos, realizamos un pequeño análisis exploratorio.
+
+En primer lugar, nos interesa saber la proporción de clientes con un buen riesgo crediticio, así como con mal riesgo. Esto lo vemos en el código a continuación:
+
+```{r proporcion riesgo}
+credit %>% 
+  dplyr::count(risk) %>% 
+  dplyr::mutate(prop = n/sum(n))
+```
+
+
+## Análisis exploratorio
+
+## Modelamiento
+
+Recuerden que con `tidymodels` tenemos pasos bastante marcados:
+
+1. Dividir los datos (split)
+2. Feature engineering
+3. Especificación del modelo
+4. Workflow
+5. Ajuste del modelo
+6. Evaluar el modelo
+
+## División de los datos
+
+Realizamos la división en una base de train y una de test utilizando la librería `rsample`. Recuerden que tenemos que estratificar por `risk` y así asegurarnos que la proporción de casos se mantenga en ambas particiones.
+
+```{r split data}
+split_info <- rsample::initial_split(
+  data = credit,
+  prop = 0.75,
+  strata = risk
+)
+
+credit_train <- rsample::training(split_info)
+credit_test <- rsample::testing(split_info)
+```
+
+
 
 
 

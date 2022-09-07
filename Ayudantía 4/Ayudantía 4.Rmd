@@ -38,10 +38,10 @@ Bienvenid\@s a la cuarta ayudantía de EAA3707 - Machine Learning para Negocios.
 
 1.  Recordatorio modelo de regresión logística
 2.  Supuestos del modelo de regresión logística
-  2.1 Linealidad del logito
-  2.2 Independencia de las observaciones
-  2.3 Test de Hosmer & Lemeshow
-  2.4 Colinealidad de los predictores
+    1. Linealidad del logit
+    2. Independencia de las observaciones
+    3. Test de Hosmer & Lemeshow
+    4. Colinealidad de los predictores
 3. Discusión: Regresión logística altamente no balanceada 
 4. Introducción KNN
 
@@ -74,141 +74,103 @@ Además, les recuerdo los libros que les recomiendo para aprender de R:
 
 <center>![Modelo de regresión logística](https://static.javatpoint.com/tutorial/machine-learning/images/logistic-regression-in-machine-learning.png)</center>
 
-Para entender la idea del modelo de regresión logística, es importante recordar el modelo de regresión lineal que vieron en su curso de probabilidad y estadística. En aquel curso, vieron (probablemente) que el modelo de regresión podía ser representado como:
+Antes de partir con la ayudantía, es importante recordar los conceptos y definiciones importantes del modelo de regresión logística.
 
-$$
-  y_i = \beta_0 + \beta_1x_{i, 1} + ... + \beta_p x_{i, p} + \varepsilon_{i} \quad \text{donde}\quad
-  \varepsilon_i \overset{i.i.d.}{\sim} N(0, \sigma^2)
-$$
-
-Esto es, las observaciones $y_i$ están relacionadas de manera lineal con un conjunto de predictores $\mathbf{x}_i = (x_{i, 1}, ..., x_{i, p})$, pero existe una componente aleatoria $\varepsilon_i$, la cual puede representar, por ejemplo, errores de medición o errores al no considerar ciertos predictores.
-
-La notación anterior es fácil de entender, pero lamentablemente no es muy útil, ya que no generaliza bien a otro tipo de modelos. Así, podemos escribir el modelo anterior de manera equivalente como:
-
-$$
-\begin{align}
-y_i|\mathbf{x}_i &\overset{ind}{\sim} N(\mu_i, \sigma^2) \\
-\mu_i &= \beta_0 + \beta_1x_{i, 1} + ... + \beta_p x_{i, p}
-\end{align}
-$$
-
-**Nota**: es bastante probable que sí vieron ambas formas de definir el modelo, lo importante acá es que al menos yo prefiero la segunda ya que se puede generalizar fácilmente.
-
-Así, lo anterior representa el modelo de regresión como un modelo en el cual se modela la **media** de la distribución ($\mu_i$), que en este caso es la distribución **Normal**, como una función lineal de ciertos predictores o covariables ($\mathbf{x}_i$).
-
-Lo anterior funciona si es que nuestra variable respuesta $y_i$ puede tomar cualquier valor entre $-\infty$ y $\infty$, pero, por ejemplo, ¿qué pasa en el caso que $y_i$ corresponde a si una persona paga o no paga un crédito?
-
-En el caso anterior podemos usar un modelo **Bernoulli**, donde el parámetro corresponde a la probabilidad que ocurra el evento. Además, en este caso, podrán recordar que la media de una variable aleatoria Bernoulli es justamente este parámetro. Siguiendo el modelo de regresión, nos gustaría definir un modelo equivalente:
+Recordemos que en el caso de regresión logística el modelo puede ser escrito como:
 
 $$
 \begin{align}
 y_i|\mathbf{x}_i &\overset{ind}{\sim} \text{Bernoulli}(\theta_i) \\
-\theta_i &= \beta_0 + \beta_1x_{i, 1} + ... + \beta_p x_{i, p}
+g(\theta_i) &= \beta_0 + \beta_1x_{i, 1} + ... + \beta_p x_{i, p} = x^T \beta
 \end{align}
 $$
 
-Pero resulta que hay un problema con lo anterior, y es que el parámetro $\theta_i$ representa una **probabilidad**, la cual debe estar entre 0 y 1, pero al escribirlo como una función lineal de los $\beta$ y las covariables estamos dando la posibilidad que este parámetro pueda ser menor que 0 o mayor que 1, lo cual no tendría sentido.
-
-¿Cómo arreglamos este problema?, la respuesta es bastante simple y es que, en vez de modelar directamente la media como una función lineal, modelamos la media como una **transformación** de la función lineal. En este caso, nos gustaría una transformación que tome valores entre $-\infty$ y $\infty$ y entregue valores entre 0 y 1. Así, el modelo final queda definido como:
+donde $g$ es la función logit, esto es,
 
 $$
-\begin{align}
-y_i|\mathbf{x}_i &\overset{ind}{\sim} \text{Bernoulli}(\theta_i) \\
-\theta_i &= g(\beta_0 + \beta_1x_{i, 1} + ... + \beta_p x_{i, p})
-\end{align}
+g(\theta_i) = \text{logit }\theta_i = \log \frac{\theta_i}{1 - \theta_i}
 $$
 
-Luego, lo último sería elegir la función $g(x)$. Como se mencionó anteriormente, nos gustaría una función que tome valores en $(-\infty, \infty)$ y los lleve a $(0, 1)$. Una opción sería tomar la **función logística**, definida como:
+En palabras, lo anterior nos dice que proponemos un modelo en el cual se modela la variable respuesta, $Y$, como realizaciones de una variable aleatoria Bernoulli, esto es, $Y=1$ con probabilidad $\theta$ o $Y=0$ con probabilidad $1 - \theta$, donde el **logit de la media** de la distribución se modela como una función lineal de ciertos predictores o covariables.
+
+--
+**Nota**: recuerde que si $Y \sim \text{Bernoulli}(p)$ entonces $E(Y) = p$, por lo que el parámetro corresponde justamente a la media. Esto no necesariamente sucede con cualquier modelo.
+--
+
+De manera equivalente, notemos que
 
 $$
-g(x) = \frac{e^x}{1 + e^x}
+g(\theta_i) = \log \frac{\theta_i}{1 - \theta_i} = x_i^T \beta\Leftrightarrow \theta_i = \frac{\exp(x^T\beta)}{1 + \exp(x^T\beta)}
 $$
 
-y es justamente de acá que viene el nombre **regresión logística**. Podemos ver en el siguiente gráfico que la función logística tiene justamente el comportamiento deseado.
+por lo tanto, también podemos decir que la **media** de la distribución es la función logística de la componente lineal $x^T\beta$ (a veces denominada componente sistemática)
 
-```{r function logistica, echo=FALSE, fig.align='center'}
+--
+**Nota**: Como se mencionó la semana pasada, lo único que necesitamos de la función $g$ es que lleve valores de $(0, 1)$ a $(-\infty, \infty)$. La función logit es solo una de ellas, pero está también por ejemplo la función probit o la log-log-complementaria (de hecho, si se fijan la inversa de cualquier función de distribución acumulada cumple lo pedido). Pese a esto, en la práctica el modelo se sigue denominando regresión logística, solo que decimos que cambiamos la **función de enlace**.
+--
+
+En la figura a continuación podemos ver las diferencias entre los enlaces logit, probit y log-log-complementario.
+
+```{r distintos enlaces, echo=FALSE, fig.align='center'}
 logistic <- function(x){exp(x)/(exp(x) + 1)}
+probit <- function(x){pnorm(x)}
+llc <- function(x){1 - exp(-exp(x))}
+
 ggplot(data.frame(x = c(-10, 10)), aes(x = x)) + 
   stat_function(fun = logistic, col = 'red', lwd = 1) +
+  stat_function(fun = probit, col = 'blue', lwd = 1) +
+  stat_function(fun = llc, col = 'green', lwd = 1) +
   geom_hline(yintercept = c(0, 1), lty = 'dashed') +
+  geom_hline(yintercept = 0.5, lty = 'dashed') +
+  geom_vline(xintercept = 0, lty = 'dashed') +
   ylim(-0.1, 1.1) +
-  labs(title = 'Función logística')
+    labs(title = 'Diferentes funciones de enlace',
+         subtitle = 'Rojo - logit, Azul - probit, Verde - llc',
+         y = 'p(Y=1|x)')
 ```
 
-Recapitulando, en el modelo de regresión logística se tiene:
-
-$$
-\begin{align}
-y_i|\mathbf{x}_i &\overset{ind}{\sim} \text{Bernoulli}(\theta_i) \\
-\theta_i &= \frac{e^{\beta_0 + \beta_1x_{i, 1} + ... + \beta_p x_{i, p}}}{1 + e^{\beta_0 + \beta_1x_{i, 1} + ... + \beta_p x_{i, p}}}
-\end{align}
-$$
-
-**Nota**: existen razones teóricas por la cual se toma preferentemente la función logística, pero estas razones escapan del curso.
+Notamos de lo anterior que tanto el logit como el probit son funciones de enlace simétricas, pero no así el enlace log-log-complementario.
 
 ## Definiciones importantes
 
-En el modelo de regresión, los parámetros $\beta$ que acompañan a algún predictor tienen una interpretación bastante directa. Por ejemplo, si tenemos que $y$ es el monto total de ventas, $x$ corresponde a el gasto en publicidad y tenemos el modelo $y = \beta_0 + \beta_1 x + \varepsilon$, entonces $\beta_0$ indica el monto total de ventas, en promedio, cuando gastamos 0 en publicidad, y $\beta_1$ corresponde a cuánto aumenta, en promedio, el monto total de ventas por cada unidad extra de gasto en publicidad.
+También es importante recordar la siguiente terminología, que es muy utilizada en el contexto de regresión logística.
 
-```{r reg lineal, echo=FALSE, fig.align='center'}
-x <- seq(20, 100, length.out = 100) + runif(100, -5, 5)
-y <- 3 + 4 * x + rnorm(100, sd = 50)
-recta <- function(x){3 + 4*x}
-
-ggplot(data.frame(x = x, y = y), aes(x = x, y = y)) + 
-  geom_point() + 
-  stat_function(fun = recta, col = 'red', lwd = 2) +
-  labs(title = 'Función lineal')
-```
-
-Para entender la interpretación de los parámetros en el modelo de regresión logística necesitamos ver algunas definiciones importantes. Para esto consideremos el caso más simple:
-
--   Tenemos la variable $y$ que toma el valor 1 con probabilidad $\theta$ y 0 con probabilidad $1 - \theta$.
--   Tenemos una única variable predictora $x$ que puede tomar el valor 0 o 1.
-
-Es decir, el modelo está definido por:
+Las **chances** u **odds** de un suceso es el cociente entre sus probabilidades de ocurrencia y sus probabilidades de no ocurrencia, esto es,
 
 $$
-\theta(x) = \frac{e^{\beta_0 + \beta_1 x}}{1 + e^{\beta_0 + \beta_1x}}
+\text{Odds}(A) = \frac{P(A)}{1 - P(A)}
 $$
 
-Un ejemplo de lo anterior podría ser estudiar la probabilidad de que una persona desarrolle cáncer al pulmón ($y = 1$) considerando si la persona fuma $(x = 1)$.
-
-La primera definición importante en el contexto de regresión logística son las **chances**, por ejemplo las chances de que una persona desarrolle cáncer al pulmón si es que fuma. Así, la chance de observar un resultado positivo ($y = 1$) versus uno negativo ($y = 0$) cuando la variable explicativa toma el valor $x$ se define como:
+En el caso de regresión logística con $p$ predictores, el odds de un suceso es el cociente entre sus probabilidades de ocurrencia y sus probabilidades de no ocurrencia, dejando $x$ fijo, esto es
 
 $$
-\frac{P(y = 1|x)}{P(y = 0|x)} = \frac{P(y = 1|x)}{1 - P(y = 1|x)} = \frac{\theta(x)}{1 - \theta(x)}
+\text{Odds}(Y=1|x) = \frac{\theta(x)}{1 - \theta(x)} = \exp(x^T\beta)
 $$
 
-En el caso de regresión logística se tiene (verifíquenlo ustedes):
+El cambio proporcional en los odds se calcula dividiendo los odds después de un cambio y los odds antes del cambio, lo que se conoce como la **razón de chances** u **odds ratio**.
+
+En el caso de regresión logística, tenemos que si el predictor $j$ aumenta una unidad, entonces
 
 $$
-\frac{\theta(0)}{1 - \theta(0)} = e^{\beta_0} \Rightarrow \log \frac{\theta(0)}{1 - \theta(0)} = \beta_0
+\text{OR}(x_j + 1, x_j) = \frac{\text{Odds}(Y=1|x_j + 1)}{\text{Odds}(Y = 1|x_j)} = \exp(\beta_j)
 $$
 
-Es decir, en el caso que $x$ tome solo los valores 0 o 1, $\beta_0$ se interpreta como el logaritmo de la chance de obtener un resultado positivo cuando no ocurre $x$.
+luego, $\exp(\beta_j)$ se interpreta como el factor por el que cambian las chances cuando el predictor $j$, $x_j$, aumenta en una unidad.
 
-Por otro lado, la segunda definición importante es la de **razón de chances**. La razón de chances de observar un resultado positivo cuando $x=1$ versus $x = 0$ está dada por:
+# Supuestos del modelo de regresión logística
 
-$$
-\frac{\theta(1)}{1 - \theta(1)}\Big/\frac{\theta(0)}{1 - \theta(0)} = e^{\beta_1} \Rightarrow \log \frac{\theta(1)}{1 - \theta(1)}\Big/\frac{\theta(0)}{1 - \theta(0)} = \beta_1
-$$
+Cada modelo que proponemos para describir la realidad se basan, algunos en menor medida, en supuestos que hacemos para simplificar el análisis, sin una gran pérdida en generalidad.
 
-Así, en este caso, $\beta_1$ corresponde al logaritmo de la razón de chances entre $x=1$ y $x=0$.
+En particular, el modelo de regresión logística también se basa en ciertos supuestos, pero para entenderlos mejor es más fácil ver los supuestos del modelo de regresión que ya han visto.
 
-¿Y qué sucede en el caso general?, esto se los dejo a ustedes, pero repitiendo lo anterior obtendrán que, si consideramos solo un predictor $x$:
+--
+**Nota**: es probable que ya vieron el tema de los supuestos en su curso de estadística, así que pasaré muy por encima en este caso.
+--
 
--   $\beta_0$ corresponde al logaritmo la chance de obtener un resultado positivo versus uno negativo cuando $x = 0$
+## Supuestos modelo de regresión lineal
 
--   $\beta_1$ corresponde a cuanto aumenta el logaritmo de la razón de chances cuando $x$ aumenta en 1 unidad.
 
-**Nota**: podrán notar que en el modelo de regresión logística se tiene:
 
-$$
-\log \frac{\theta(x)}{1 - \theta(x)} = \beta_0 + \beta_1 x_1 + ... + \beta_p x_p
-$$
-
-es decir, lo que hace el modelo es modelar el logaritmo de las chances como una función lineal en los parámetros y predictores.
 
 # Ajuste de un modelo de regresión logística
 

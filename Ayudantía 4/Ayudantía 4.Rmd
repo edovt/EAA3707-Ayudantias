@@ -47,13 +47,16 @@ Antes de comenzar, cargamos las librerías que utilizaremos durante la ayudantí
 library(tidyverse)
 library(tidymodels)
 library(car)
+library(GGally)
+library(ggcorrplot)
+library(ResourceSelection)
 
 
 # Para obtener resultados reproducibles
 set.seed(912)
 ```
 
-La librería `car` será utilizada para realizar diferentes tests para evaluar los supuestos del modelo de regresión logística.
+La librería `car` será utilizada para realizar diferentes tests para evaluar los supuestos del modelo de regresión logística. Las librerías `GGally` y `ggcorrplot` para realizar gráficos para estudiar colinealidad. Por último, la librería `ResourceSelection` nos permite realizar el test de Hosmer-Lemeshow para la bondad de ajuste de un modelo de regresión logística.
 
 Además, les recuerdo los libros que les recomiendo para aprender de R:
 
@@ -110,7 +113,7 @@ por lo tanto, también podemos decir que la **media** de la distribución es la 
 
 En la figura a continuación podemos ver las diferencias entre los enlaces logit, probit y log-log-complementario.
 
-```{r distintos enlaces, echo=FALSE, fig.align='center'}
+```{r distintos enlaces, echo=FALSE, fig.align='center', out.width='80%'}
 logistic <- function(x){exp(x)/(exp(x) + 1)}
 probit <- function(x){pnorm(x)}
 llc <- function(x){1 - exp(-exp(x))}
@@ -167,11 +170,11 @@ $$
 \log \frac{\theta_i}{1 - \theta_i} = x_i^T \beta
 $$
 2. Independencia de las observaciones
-3. No-colinealidad de los predictores
+3. No-colinealidad de los predictores: en este caso es importante notar que el problema es grave cuando una varible es **exactamente** o **muy** cercano a una combinación lineal de las otras. En el caso que exista colinealidad no tan perfecta, el problema tiene que ver con las estimaciones del modelo.
 
-Es importante notar que algunos de estos supuestos pueden ser estudiados de manera visual, antes de ajustar los datos, o de manera más formal, lo cual usualmente se realiza **después** de ajustar el modelo. Es importante notar que los chequeos visuales a veces no sirven mucho, ya que no podemos ver en más de 3 dimensiones.
+Algunos de estos supuestos pueden ser estudiados de manera visual, antes de ajustar los datos, o de manera más formal, lo cual usualmente se realiza **después** de ajustar el modelo. Es importante notar que los chequeos visuales a veces no sirven mucho, ya que no podemos ver en más de 3 dimensiones.
 
-¿Por qué después? porque aprovechamos las propiedades distribucionales de los datos, con lo cual podemos definir estadísticos muestrales. En particular, en los modelos de regresión es común utilizar los **residuos** $y_i - \hat{y}_i$ y aprovecharnos de algunas propiedades distribucionales asintóticas.
+¿Por qué después? porque aprovechamos las propiedades distribucionales de los datos, con lo cual podemos definir estadísticos muestrales. En particular, en los modelos de regresión es común utilizar los **residuos** y aprovecharnos de algunas propiedades distribucionales asintóticas.
 
 **Nota**: podrán notar que el supuesto de homocedasticidad no está presente en el caso de regresión logística.
 
@@ -240,12 +243,14 @@ prop_logit <- credit %>%
   dplyr::group_by(age, risk, .drop = FALSE) %>% 
   dplyr::count() %>% 
   dplyr::filter(risk == 'bad') %>% 
-  dplyr::left_join(age_freqs) %>% 
+  dplyr::left_join(age_freqs, by = 'age') %>% 
   dplyr::mutate(prop = n/total)
 
 logitos <- car::logit(prop_logit$prop, adjust = 0.01)
 prop_logit$logitos = logitos
+```
 
+```{r gráficos age, fig.align='center', echo=FALSE, out.width='80%'}
 # Graficamos
 ## Proporciones
 ggplot(prop_logit, mapping = aes(x = age, y = prop)) +
@@ -259,23 +264,24 @@ ggplot(prop_logit, mapping = aes(x = age, y = logitos)) +
   geom_point() +
   labs(title = 'Análisis visual linealidad del logito',
        subtitle = 'Usando la variable Age',
-       x = 'Edad', y = 'Proporción muestral')
+       x = 'Edad', y = 'Logito muestral')
 ```
+
 
 A través del gráfico podemos ver que al parecer no se cumple el supuesto de linealidad del logito **si sólo consideramos la variable Age**.
 
 Ahora veamos una variable continua, en particular la variable `credit_amount`. En el caso continuo, si no se repiten mucho los valores, es conveniente agrupar los datos en categorías.
 
 ```{r ejemplo credit amount, fig.align='center'}
-# Podemos contar según la edad, vemos que en este caso hay 847 n_i = 1
+# Podemos contar según el monto del crédito, vemos que en este caso hay 847 n_i = 1
 am_freqs <- credit %>% 
   dplyr::count(credit_amount, name = 'total')
 am_freqs
 sum(am_freqs$total == 1)
 
-# Agrupamos las edades en intervalos
+# Agrupamos los montos en intervalos
 binned <- credit %>% 
-  dplyr::mutate(amount_bin = cut(credit_amount, breaks = 10, labels = FALSE)) %>% 
+  dplyr::mutate(amount_bin = cut(credit_amount, breaks = 15, labels = FALSE)) %>% 
   dplyr::select(credit_amount, amount_bin, risk)
 
 amb_freqs <- binned %>% 
@@ -288,12 +294,14 @@ prop_logit <- binned %>%
   dplyr::group_by(amount_bin, risk, .drop = FALSE) %>% 
   dplyr::count() %>% 
   dplyr::filter(risk == 'bad') %>% 
-  dplyr::left_join(amb_freqs) %>% 
+  dplyr::left_join(amb_freqs, by = 'amount_bin') %>% 
   dplyr::mutate(prop = n/total)
 
 logitos <- car::logit(prop_logit$prop, adjust = 0.01)
 prop_logit$logitos = logitos
+```
 
+```{r graficos credit amount, fig.align='center', echo=FALSE, out.width='80%'}
 # Graficamos
 ## Proporciones
 ggplot(prop_logit, mapping = aes(x = amount_bin, y = prop)) +
@@ -307,168 +315,31 @@ ggplot(prop_logit, mapping = aes(x = amount_bin, y = logitos)) +
   geom_point() +
   labs(title = 'Análisis visual linealidad del logito',
        subtitle = 'Usando la variable Credit Amount',
-       x = 'Monto del crédito ajustado', y = 'Proporción muestral')
+       x = 'Monto del crédito ajustado', y = 'Logito muestral')
 ```
 
-Vemos que en este caso sí pareciera existir una pequeña relación lineal **sólo si consideramos el monto del crédito**.
+Vemos que en este caso sí pareciera existir una pequeña relación lineal **sólo si consideramos el monto del crédito**. 
 
-## Modelamiento
+**Nota**: también podemos ver visualmente los problemas de colinealidad entre las variables, como se explicó anteriormente. Para esto podemos simplemente graficar las variables de a pares (¿qué problema tiene esto?)
 
-Recuerden que con `tidymodels` tenemos pasos bastante marcados:
+```{r gráficos de correlación, fig.align='center', out.width='80%'}
+## ggpairs
+GGally::ggpairs(credit, columns = c('credit_amount', 'age', 'duration', 'n_credits'))
 
-1. Dividir los datos - `rsample`
-2. Especificación del modelo - `parsnip`
-3. Pre-procesamiento de los datos y Feature engineering - `recipes`
-4. Ajuste del modelo - `workflows`, `parsnip`, `broom`, `tune`
-5. Evaluación del modelo - `workflows`, `yardstick`, `tune`, `broom`
+## ggcorrplot recibe la matriz de correlación
+cor_mat <- credit %>% 
+  dplyr::select(credit_amount, age, duration, n_credits) %>% 
+  as.data.frame() %>% 
+  cor()
 
-**Nota**: 2 y 3 son intercambiables.
-
-Lo anterior queda mejor representado en la siguiente imagen:
-
-<center>![Modelo de regresión logística](https://jhudatascience.org/tidyversecourse/images/book_figures/MachineLearning_tidymodels.png)
-
-</center>
-
-
-### División de los datos
-
-Realizamos la división en una base de entrenamiento y una de test utilizando la librería `rsample`. Recuerden que tenemos que estratificar por `risk` y así asegurarnos que la proporción de casos se mantenga en ambas particiones.
-
-```{r split data}
-split_info <- rsample::initial_split(
-  data = credit,
-  prop = 0.75,
-  strata = risk
-)
-
-credit_train <- rsample::training(split_info)
-credit_test <- rsample::testing(split_info)
+ggcorrplot::ggcorrplot(cor_mat, lab = TRUE)
 ```
 
-Verificamos que efectivamente se mantienen las proporciones.
+Es importante recordar que estos chequeos no son formales (estadísticamente). Así, para realizar tests estadísticos debemos ajustar el modelo.
 
-```{r verificar props}
-# Base de entrenamiento
-credit_train %>% 
-  dplyr::count(risk) %>% 
-  dplyr::mutate(prop = n/sum(n))
-  
-# Base de testeo
-credit_test %>% 
-  dplyr::count(risk) %>% 
-  dplyr::mutate(prop = n/sum(n))
-```
+## Ajuste modelo
 
-### Especificación del modelo
-
-Recuerden que utilizamos la librería `parsnip` para definir el modelo.
-
-```{r especificacion modelo}
-# Especificamos el modelo
-logreg_model <- 
-  parsnip::logistic_reg() %>% 
-  set_engine('glm') %>% 
-  set_mode('classification')
-
-# Podemos ver los detalles del modelo
-logreg_model %>% 
-  parsnip::translate()
-```
-
-**Nota**: para `logistic_reg()` el engine por defecto es `glm`, y el modo por defecto es `classification`, por lo que no es necesario usar el `set_engine()` y `set_mode()`. De todas maneras, yo prefiero incluir las funciones ya que personalmente prefiero ser explícito en los códigos.
-
-### Pre-procesamiento de los datos y Feature engineering
-
-Para este paso usamos la librería `recipes`. En nuestro caso nos interesa:
-
-1. Definir la relación entre predictores y variable respuesta
-2. Definir los datos a utilizar en el ajuste
-3. Definir las transformaciones necesarias a los datos, en particular, queremos centrar y escalar las variables numéricas, así como codificar las variables categóricas.
-
-Lo anterior se encuentra en el siguiente código.
-
-```{r preprocesamiento datos}
-# Creamos la receta
-credit_recipe <- 
-  recipes::recipe(risk ~ ., data = credit_train) %>% 
-  step_dummy(all_nominal_predictors()) %>% 
-  step_normalize(all_predictors())
-
-# Podemos ver los detalles de la receta
-credit_recipe
-```
-
-### Ajuste del modelo
-
-Juntamos todo el proceso en un objeto `workflow` y ajustamos el modelo en los datos de entrenamiento, utilizando la librería `parsnip`.
-
-```{r workflow}
-# Definimos el workflow (o pipeline)
-logreg_wf <-
-  workflows::workflow() %>%
-  add_model(logreg_model) %>%
-  add_recipe(credit_recipe)
-
-# Ajustamos el modelo con parsnip
-logreg_fit <- logreg_wf %>%
-  parsnip::fit(data = credit_train)
-
-# Podemos ver la receta ajustada
-logreg_fit %>%
-  extract_recipe(estimated = TRUE)
-
-# Podemos ver el modelo ajustado
-logreg_fit %>%
-  extract_fit_parsnip() %>%
-  broom::tidy()
-```
-
-A partir del modelo ajustado obtenemos varios valores importantes, entre los cuales se encuentra el valor estimado del parámetro $\beta_i$, junto al valor-p correspondiente.
-
-Recuerden que el intercepto corresponde al logaritmo de la chance de que el cliente tenga un riesgo crediticio alto, **cuando todos los predictores son 0**. ¿Tiene sentido esto en este caso? hint: recuerden que normalizamos las variables antes de realizar el ajuste del modelo. Así, tenemos que
-
-$$
-\log \frac{\theta(0)}{1 - \theta(0)} \approx -0.951 \Rightarrow \theta(0) = \frac{e^{\beta_0}}{1 + e^{\beta_0}} \approx 0.279
-$$
-
-Por último, podemos ver las predicciones del modelo en la base de testeo.
-
-```{r prediccion modelo}
-# Podemos ver las predicciones del modelo y comparar con el real
-credit_test_pred <- credit_test %>% 
-  dplyr::select(risk) %>% 
-  dplyr::mutate(predict(logreg_fit, new_data = credit_test)) %>% 
-  dplyr::rename(risk_pred = .pred_class)
-
-head(credit_test_pred)
-
-## Podemos ver cuantos fueron categorizados como bueno y malo
-credit_test_pred %>% 
-  dplyr::count(risk_pred) %>% 
-  dplyr::mutate(prop = n/sum(n))
-```
-
-### Evaluación del modelo
-
-Notemos que en este caso no estamos evaluando diferentes modelos para ver cuál es mejor ni tampoco tenemos que optimizar hiperparámetros, por lo que podemos evaluar directamente el modelo ajustado en la base de test para ver cómo se defiende ante datos nuevos.
-
-En este caso, una forma que tenemos para evaluar el modelo es usando la librería `tune`. Esta librería tiene una función conveniente llamada `last_fit()`, la cual ajusta el modelo con los datos de entrenamiento y realiza la predicción en la base de test, entregando diferentes métricas. Es importante notar que esta función **recibe la información del split**.
-
-```{r evaluacion del modelo}
-# last_fit ajusta y predice al mismo tiempo
-final_logreg <- 
-  logreg_wf %>% 
-  tune::last_fit(split_info)
-
-# Obtenemos algunas métricas con collect_metrics()
-final_logreg %>% 
-  collect_metrics()
-```
-
-En particular, `last_fit()` nos entrega dos medidas de evaluación: accuracy y roc_auc, pero de momento no nos preocupemos por la segunda. El **accuracy** nos dice la proporción de los datos en la base de testeo que el modelo fue capaz de predecir correctamente. Vemos que en este caso el modelo es capaz de predecir bien aproximadamente el 70% de las veces.
-
-### Todos los pasos juntos
+Repetimos el código de modelamiento usando `tidymodels` de la ayudantía pasada.
 
 ```{r modelamiento completo}
 # 1 - Dividimos los datos
@@ -499,12 +370,94 @@ logreg_wf <-
   add_model(logreg_model) %>%
   add_recipe(credit_recipe)
 
-# 5 - Ajustamos el modelo
+# 5 - Ajustamos el modelo y lo recuperamos
 logreg_fit <- logreg_wf %>%
-  parsnip::fit(data = credit_train)
+  parsnip::fit(data = credit_train) %>% 
+  workflowsets::extract_fit_parsnip() %>% 
+  .$fit
 
-# 6 - Evaluamos el modelo
-logreg_metrics <- logreg_wf %>% 
-  tune::last_fit(split_info) %>% 
-  collect_metrics()
+# Vemos un resumen del modelo ajustado
+summary(logreg_fit)
 ```
+
+## Test de linealidad del logito
+
+Una vez ajustado el modelo, podemos realizar tests estadísticos formales para estudiar la hipótesis de linealidad del logito. Pero antes, les daré otra forma visual de estudiar una hipótesis **después** de ajustar el modelo.
+
+Para esto, notemos que si $y_i$ corresponde al dato y $\hat{\theta}_i = exp(x^T\hat{\beta})/(1 + \exp(x^T\hat{\beta}))$ al valor ajustado, entonces esperamos que los valores $y_i - \hat{\theta}_i$ sean cercanos a 0 para cada valor de $x^T\hat{\beta}$. Ahora, en este caso tendremos el mismo problema al considerar $x^T\hat{\beta}$, por lo que podemos nuevamente agrupar los datos en intervalos.
+
+```{r grafico residuos, echo=FALSE, fig.align='center', out.width='80%'}
+# Recuperamos residuos y valores ajustados
+residuos <- residuals(logreg_fit)
+ajustados <- fitted(logreg_fit)
+
+aux <- tibble(res = residuos, ajust = ajustados)
+
+ggplot(data = aux, mapping = aes(x = ajust, y = res)) +
+  geom_point() +
+  geom_hline(yintercept = 0, lty = 'dashed', col = 'red') +
+  labs(title = 'Linealidad del logito', subtitle = 'Sin agrupar')
+
+# Agrupamos nuevamente
+aux2 <- aux %>% 
+  dplyr::mutate(ajust_bin = cut(ajust, breaks = 20, labels = FALSE)) %>% 
+  dplyr::group_by(ajust_bin) %>% 
+  dplyr::summarise(res_medio = mean(res))
+
+ggplot(data = aux2, mapping = aes(x = ajust_bin, y = res_medio)) +
+  geom_point() +
+  geom_hline(yintercept = 0, lty = 'dashed', col = 'red') +
+  labs(title = 'Linealidad del logito', subtitle = 'Datos agrupados')
+```
+
+De manera más formal, podemos realizar el test de Box-Tidwell. Este test tiene por hipótesis nula que la relación entre el logit y cada predictor **continuo** es lineal.
+
+```{r test bt}
+aux <- credit %>% 
+  dplyr::mutate(risk = as.integer(risk) - 1)
+
+car::boxTidwell(formula = risk ~ duration + credit_amount + age,
+                data = aux)
+```
+
+Vemos que en este caso el test nos dice que, si consideramos un nivel de significancia $\alpha = 0.05$, ninguna variable **por sí sola** cumple el supuesto de linealidad del logito.
+
+## Independencia de las observaciones (discusión)
+
+## No-colinealidad de los predictores: Factor de inflación de la varianza
+
+En modelos de regresión existen diferentes problemas con respecto a la colinealidad o multicolinealidad de las variables predictoras. En primer lugar, tenemos que si las variables son **perfectamente** multicolineales, entonces ni siquiera podemos calcular los estimadores. Por otro lado, si están **muy** cercanos a ser perfectamente multicolineales, entonces es probable que tengamos problemas numéricos.
+
+Ahora, si el problema no es tan grave, igual pueden existir problemas si tenemos variables altamente colineales, que tienen que ver, más que nada, con que se nos agrandan los errores estándar de cada estimador.
+
+Así, existe una medida que mide multicolinealidad de cada variable con respecto a las otras, denominada el **Factor de Inflación de la Varianza (VIF)**. Se han propuesto diferentes valores de corte, pero un valor $>5$ parece ser prudente.
+
+```{r vif, echo=FALSE}
+# Calculamos los VIF
+car::vif(logreg_fit)
+```
+
+Vemos que en nuestro caso ninguna variable tiene un VIF mayor que 5, por lo que tenemos evidencia que no existe una multicolinealidad pronunciada entre las variables predictoras.
+
+# Algunos tests de bondad de ajuste
+
+## Devianza
+
+```{r resultados modelo}
+summary(logreg_fit)
+```
+
+## Test de Hosmer-Lemeshow
+
+El test de Hosmer-Lemeshow es un test de bondad de ajuste específico del modelo de regresión logística. De manera simple, lo que hace es dividir las variables predictivas en subgrupos, realizando tests de bondad de ajuste en cada una de estas regiones. El test busca así ver si el modelo está bien calibrado, y que no existan subgrupos en los cuales el ajuste es malo.
+
+```{r test hl}
+ResourceSelection::hoslem.test(logreg_fit$y, fitted(logreg_fit))
+```
+
+
+# Discusión: regresión logística altamente no balanceada
+
+- Algoritmo SMOTE (Synthetic Minority Oversampling Technique)
+
+- Algoritmo Near-Miss (undersampling)

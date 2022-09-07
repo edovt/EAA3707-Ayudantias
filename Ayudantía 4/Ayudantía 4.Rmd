@@ -1,0 +1,481 @@
+---
+title: "Ayudantía 4 - ML para Negocios"
+date: "7 de septiembre del 2022"
+output:
+  rmdformats::downcute:
+    self_contained: true
+    default_style: "light"
+    downcute_theme: "default"
+---
+
+```{=html}
+<style type="text/css">
+body{
+  font-size: 15pt;
+}
+.Wrap {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+```
+
+```{r setup, include=FALSE, message=FALSE}
+library(here)
+
+
+## Global options
+knitr::opts_chunk$set(cache = TRUE)
+
+# Here
+here::i_am('Ayudantía 4/Ayudantía 4.Rmd')
+```
+
+# Introducción
+
+Bienvenid\@s a la cuarta ayudantía de EAA3707 - Machine Learning para Negocios. En la ayudantía veremos:
+
+1.  Recordatorio modelo de regresión logística
+2.  Supuestos del modelo de regresión logística
+  2.1 Linealidad del logito
+  2.2 Independencia de las observaciones
+  2.3 Test de Hosmer & Lemeshow
+  2.4 Colinealidad de los predictores
+3. Discusión: Regresión logística altamente no balanceada 
+4. Introducción KNN
+
+Antes de comenzar, cargamos las librerías que utilizaremos durante la ayudantía.
+
+```{r librerias, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(tidymodels)
+
+
+# Para obtener resultados reproducibles
+set.seed(912)
+```
+
+Además, les recuerdo los libros que les recomiendo para aprender de R:
+
+-   **Hands-On Programming with R**: disponible [acá](https://rstudio-education.github.io/hopr/). Útil para recordar cosas básicas de R.
+
+-   **Advanced R**: disponible [acá](https://adv-r.hadley.nz/). Para aprender R avanzado (realmente avanzado), si es que están interesados en entender cómo funciona R por detrás.
+
+-   **R for Data Science**: disponible [acá](https://r4ds.had.co.nz/). Bueno para aprender y aplicar Data Science de manera rápida, además de ser uno de los libros guía para aprender acerca de los paquetes de tidyverse.
+
+-   **RMarkdown Cookbook**: disponible [acá](https://bookdown.org/yihui/rmarkdown-cookbook/). Útil para aprender lo básico de RMarkdown.
+
+-   **RMarkdown: The Definitive Guide**: disponible [acá](https://bookdown.org/yihui/rmarkdown/). Útil para aprender cosas avanzadas de RMarkdown.
+
+-   **Tidy Modeling with R**: disponible [acá](https://www.tmwr.org/). Recomendado para aprender del ecosistema tidymodels. Tiene también un capítulo pequeño de tidyverse con lo justo y necesario.
+
+# Recuerdo del modelo de regresión logística
+
+<center>![Modelo de regresión logística](https://static.javatpoint.com/tutorial/machine-learning/images/logistic-regression-in-machine-learning.png)</center>
+
+Para entender la idea del modelo de regresión logística, es importante recordar el modelo de regresión lineal que vieron en su curso de probabilidad y estadística. En aquel curso, vieron (probablemente) que el modelo de regresión podía ser representado como:
+
+$$
+  y_i = \beta_0 + \beta_1x_{i, 1} + ... + \beta_p x_{i, p} + \varepsilon_{i} \quad \text{donde}\quad
+  \varepsilon_i \overset{i.i.d.}{\sim} N(0, \sigma^2)
+$$
+
+Esto es, las observaciones $y_i$ están relacionadas de manera lineal con un conjunto de predictores $\mathbf{x}_i = (x_{i, 1}, ..., x_{i, p})$, pero existe una componente aleatoria $\varepsilon_i$, la cual puede representar, por ejemplo, errores de medición o errores al no considerar ciertos predictores.
+
+La notación anterior es fácil de entender, pero lamentablemente no es muy útil, ya que no generaliza bien a otro tipo de modelos. Así, podemos escribir el modelo anterior de manera equivalente como:
+
+$$
+\begin{align}
+y_i|\mathbf{x}_i &\overset{ind}{\sim} N(\mu_i, \sigma^2) \\
+\mu_i &= \beta_0 + \beta_1x_{i, 1} + ... + \beta_p x_{i, p}
+\end{align}
+$$
+
+**Nota**: es bastante probable que sí vieron ambas formas de definir el modelo, lo importante acá es que al menos yo prefiero la segunda ya que se puede generalizar fácilmente.
+
+Así, lo anterior representa el modelo de regresión como un modelo en el cual se modela la **media** de la distribución ($\mu_i$), que en este caso es la distribución **Normal**, como una función lineal de ciertos predictores o covariables ($\mathbf{x}_i$).
+
+Lo anterior funciona si es que nuestra variable respuesta $y_i$ puede tomar cualquier valor entre $-\infty$ y $\infty$, pero, por ejemplo, ¿qué pasa en el caso que $y_i$ corresponde a si una persona paga o no paga un crédito?
+
+En el caso anterior podemos usar un modelo **Bernoulli**, donde el parámetro corresponde a la probabilidad que ocurra el evento. Además, en este caso, podrán recordar que la media de una variable aleatoria Bernoulli es justamente este parámetro. Siguiendo el modelo de regresión, nos gustaría definir un modelo equivalente:
+
+$$
+\begin{align}
+y_i|\mathbf{x}_i &\overset{ind}{\sim} \text{Bernoulli}(\theta_i) \\
+\theta_i &= \beta_0 + \beta_1x_{i, 1} + ... + \beta_p x_{i, p}
+\end{align}
+$$
+
+Pero resulta que hay un problema con lo anterior, y es que el parámetro $\theta_i$ representa una **probabilidad**, la cual debe estar entre 0 y 1, pero al escribirlo como una función lineal de los $\beta$ y las covariables estamos dando la posibilidad que este parámetro pueda ser menor que 0 o mayor que 1, lo cual no tendría sentido.
+
+¿Cómo arreglamos este problema?, la respuesta es bastante simple y es que, en vez de modelar directamente la media como una función lineal, modelamos la media como una **transformación** de la función lineal. En este caso, nos gustaría una transformación que tome valores entre $-\infty$ y $\infty$ y entregue valores entre 0 y 1. Así, el modelo final queda definido como:
+
+$$
+\begin{align}
+y_i|\mathbf{x}_i &\overset{ind}{\sim} \text{Bernoulli}(\theta_i) \\
+\theta_i &= g(\beta_0 + \beta_1x_{i, 1} + ... + \beta_p x_{i, p})
+\end{align}
+$$
+
+Luego, lo último sería elegir la función $g(x)$. Como se mencionó anteriormente, nos gustaría una función que tome valores en $(-\infty, \infty)$ y los lleve a $(0, 1)$. Una opción sería tomar la **función logística**, definida como:
+
+$$
+g(x) = \frac{e^x}{1 + e^x}
+$$
+
+y es justamente de acá que viene el nombre **regresión logística**. Podemos ver en el siguiente gráfico que la función logística tiene justamente el comportamiento deseado.
+
+```{r function logistica, echo=FALSE, fig.align='center'}
+logistic <- function(x){exp(x)/(exp(x) + 1)}
+ggplot(data.frame(x = c(-10, 10)), aes(x = x)) + 
+  stat_function(fun = logistic, col = 'red', lwd = 1) +
+  geom_hline(yintercept = c(0, 1), lty = 'dashed') +
+  ylim(-0.1, 1.1) +
+  labs(title = 'Función logística')
+```
+
+Recapitulando, en el modelo de regresión logística se tiene:
+
+$$
+\begin{align}
+y_i|\mathbf{x}_i &\overset{ind}{\sim} \text{Bernoulli}(\theta_i) \\
+\theta_i &= \frac{e^{\beta_0 + \beta_1x_{i, 1} + ... + \beta_p x_{i, p}}}{1 + e^{\beta_0 + \beta_1x_{i, 1} + ... + \beta_p x_{i, p}}}
+\end{align}
+$$
+
+**Nota**: existen razones teóricas por la cual se toma preferentemente la función logística, pero estas razones escapan del curso.
+
+## Definiciones importantes
+
+En el modelo de regresión, los parámetros $\beta$ que acompañan a algún predictor tienen una interpretación bastante directa. Por ejemplo, si tenemos que $y$ es el monto total de ventas, $x$ corresponde a el gasto en publicidad y tenemos el modelo $y = \beta_0 + \beta_1 x + \varepsilon$, entonces $\beta_0$ indica el monto total de ventas, en promedio, cuando gastamos 0 en publicidad, y $\beta_1$ corresponde a cuánto aumenta, en promedio, el monto total de ventas por cada unidad extra de gasto en publicidad.
+
+```{r reg lineal, echo=FALSE, fig.align='center'}
+x <- seq(20, 100, length.out = 100) + runif(100, -5, 5)
+y <- 3 + 4 * x + rnorm(100, sd = 50)
+recta <- function(x){3 + 4*x}
+
+ggplot(data.frame(x = x, y = y), aes(x = x, y = y)) + 
+  geom_point() + 
+  stat_function(fun = recta, col = 'red', lwd = 2) +
+  labs(title = 'Función lineal')
+```
+
+Para entender la interpretación de los parámetros en el modelo de regresión logística necesitamos ver algunas definiciones importantes. Para esto consideremos el caso más simple:
+
+-   Tenemos la variable $y$ que toma el valor 1 con probabilidad $\theta$ y 0 con probabilidad $1 - \theta$.
+-   Tenemos una única variable predictora $x$ que puede tomar el valor 0 o 1.
+
+Es decir, el modelo está definido por:
+
+$$
+\theta(x) = \frac{e^{\beta_0 + \beta_1 x}}{1 + e^{\beta_0 + \beta_1x}}
+$$
+
+Un ejemplo de lo anterior podría ser estudiar la probabilidad de que una persona desarrolle cáncer al pulmón ($y = 1$) considerando si la persona fuma $(x = 1)$.
+
+La primera definición importante en el contexto de regresión logística son las **chances**, por ejemplo las chances de que una persona desarrolle cáncer al pulmón si es que fuma. Así, la chance de observar un resultado positivo ($y = 1$) versus uno negativo ($y = 0$) cuando la variable explicativa toma el valor $x$ se define como:
+
+$$
+\frac{P(y = 1|x)}{P(y = 0|x)} = \frac{P(y = 1|x)}{1 - P(y = 1|x)} = \frac{\theta(x)}{1 - \theta(x)}
+$$
+
+En el caso de regresión logística se tiene (verifíquenlo ustedes):
+
+$$
+\frac{\theta(0)}{1 - \theta(0)} = e^{\beta_0} \Rightarrow \log \frac{\theta(0)}{1 - \theta(0)} = \beta_0
+$$
+
+Es decir, en el caso que $x$ tome solo los valores 0 o 1, $\beta_0$ se interpreta como el logaritmo de la chance de obtener un resultado positivo cuando no ocurre $x$.
+
+Por otro lado, la segunda definición importante es la de **razón de chances**. La razón de chances de observar un resultado positivo cuando $x=1$ versus $x = 0$ está dada por:
+
+$$
+\frac{\theta(1)}{1 - \theta(1)}\Big/\frac{\theta(0)}{1 - \theta(0)} = e^{\beta_1} \Rightarrow \log \frac{\theta(1)}{1 - \theta(1)}\Big/\frac{\theta(0)}{1 - \theta(0)} = \beta_1
+$$
+
+Así, en este caso, $\beta_1$ corresponde al logaritmo de la razón de chances entre $x=1$ y $x=0$.
+
+¿Y qué sucede en el caso general?, esto se los dejo a ustedes, pero repitiendo lo anterior obtendrán que, si consideramos solo un predictor $x$:
+
+-   $\beta_0$ corresponde al logaritmo la chance de obtener un resultado positivo versus uno negativo cuando $x = 0$
+
+-   $\beta_1$ corresponde a cuanto aumenta el logaritmo de la razón de chances cuando $x$ aumenta en 1 unidad.
+
+**Nota**: podrán notar que en el modelo de regresión logística se tiene:
+
+$$
+\log \frac{\theta(x)}{1 - \theta(x)} = \beta_0 + \beta_1 x_1 + ... + \beta_p x_p
+$$
+
+es decir, lo que hace el modelo es modelar el logaritmo de las chances como una función lineal en los parámetros y predictores.
+
+# Ajuste de un modelo de regresión logística
+
+## Datos a utilizar
+
+Pasemos ahora a la parte práctica. La base de datos `credit.data` contiene información crediticia de diferentes clientes de un banco alemán. En particular, la base de datos tiene información de 1000 clientes, con sus diferentes atributos, así como una variable que indica si la persona tiene un buen o mal riesgo crediticio.
+
+Carguemos en primer lugar la base de datos y echemos un vistazo rápido a los datos.
+
+```{r carga datos, message=FALSE}
+# Cargamos los datos (usaremos RStudio directamente)
+credit_full <- readr::read_table(
+  file = here::here('Ayudantía 3', 'german.data'), 
+  col_names = FALSE
+)
+
+# Echamos un vistazo a los datos
+dplyr::glimpse(credit_full)
+```
+
+A partir de lo anterior notamos que la base de datos viene sin nombres de las columnas, y que los valores vienen codificados en un formato que no sabemos a qué se refieren. En estos casos lo mejor es ver la fuente de los datos, que en este caso los obtuve del [Machine Learning Repository](https://archive-beta.ics.uci.edu/ml/datasets/statlog+german+credit+data) de la University of California, Irvine. De ahí obtenemos que las variables corresponden a, por ejemplo, el estado actual de la cuenta corriente, la duración en meses del crédito y el propósito del crédito.
+
+Para simplificar el análisis solo utilizaremos los atributos 2, 3, 5, 13, 15, 16 y obviamente nuestra variable respuesta. En el código a continuación realizamos esta selección, colocamos nombres explicativos y cambiamos las variables cualitativas a factor. Cambiaré también la codificación de `housing`, pero solo para mostrar cómo se hace.
+
+```{r selección y nombres}
+credit <- 
+  credit_full %>% 
+  dplyr::select(X2, X3, X5, X13, X15, X16, X21) %>% 
+  dplyr::rename(duration = X2,
+                credit_history = X3,
+                credit_amount = X5,
+                age = X13,
+                housing = X15,
+                n_credits = X16,
+                risk = X21) %>% 
+  dplyr::mutate(housing = dplyr::recode(housing, 
+                                        "A151" = 'rent',
+                                        "A152" = 'own',
+                                        "A153" = 'free'),
+                risk = dplyr::recode(risk,
+                                     `1` = 'good',
+                                     `2` = 'bad')) %>% 
+  dplyr::mutate(across(where(is.character), as_factor))
+
+# Veamos nuevamente los datos pero ahora arreglados
+dplyr::glimpse(credit)
+```
+
+Ya teniendo nuestros datos listos, realizamos un pequeño análisis exploratorio.
+
+## Análisis exploratorio
+
+En primer lugar, nos interesa saber la proporción de clientes con un buen riesgo crediticio, así como con mal riesgo. Esto lo vemos en el código a continuación:
+
+```{r proporcion riesgo}
+credit %>% 
+  dplyr::count(risk) %>% 
+  dplyr::mutate(prop = n/sum(n))
+```
+
+Vemos entonces que el 30% de los clientes tiene un mal riesgo crediticio.
+
+Además, nos interesa ver las posibles relaciones entre las variables predictoras y la variable respuesta. Una opción sería ver cómo distribuyen las edades de las personas al separar por el riesgo, lo cual vemos en el gráfico a continuación.
+
+```{r relacion edad riesgo, echo=FALSE}
+ggplot(data = credit,
+       mapping = aes(x = risk, y = age, fill = risk)) +
+  geom_boxplot() +
+  labs(x = 'riesgo', y = 'edad',
+       title = 'Relación edad y riesgo del cliente')
+```
+
+Notamos que la edad de las personas con un riesgo bajo tiene una mediana mayor que las de riesgo alto, pero que ambos riesgos tienen personas de todas las edades. Les dejo a ustedes ver otras formas de poder analizar de manera exploratoria los datos.
+
+## Modelamiento
+
+Recuerden que con `tidymodels` tenemos pasos bastante marcados:
+
+1. Dividir los datos - `rsample`
+2. Especificación del modelo - `parsnip`
+3. Pre-procesamiento de los datos y Feature engineering - `recipes`
+4. Ajuste del modelo - `workflows`, `parsnip`, `broom`, `tune`
+5. Evaluación del modelo - `workflows`, `yardstick`, `tune`, `broom`
+
+**Nota**: 2 y 3 son intercambiables.
+
+Lo anterior queda mejor representado en la siguiente imagen:
+
+<center>![Modelo de regresión logística](https://jhudatascience.org/tidyversecourse/images/book_figures/MachineLearning_tidymodels.png)
+
+</center>
+
+
+### División de los datos
+
+Realizamos la división en una base de entrenamiento y una de test utilizando la librería `rsample`. Recuerden que tenemos que estratificar por `risk` y así asegurarnos que la proporción de casos se mantenga en ambas particiones.
+
+```{r split data}
+split_info <- rsample::initial_split(
+  data = credit,
+  prop = 0.75,
+  strata = risk
+)
+
+credit_train <- rsample::training(split_info)
+credit_test <- rsample::testing(split_info)
+```
+
+Verificamos que efectivamente se mantienen las proporciones.
+
+```{r verificar props}
+# Base de entrenamiento
+credit_train %>% 
+  dplyr::count(risk) %>% 
+  dplyr::mutate(prop = n/sum(n))
+  
+# Base de testeo
+credit_test %>% 
+  dplyr::count(risk) %>% 
+  dplyr::mutate(prop = n/sum(n))
+```
+
+### Especificación del modelo
+
+Recuerden que utilizamos la librería `parsnip` para definir el modelo.
+
+```{r especificacion modelo}
+# Especificamos el modelo
+logreg_model <- 
+  parsnip::logistic_reg() %>% 
+  set_engine('glm') %>% 
+  set_mode('classification')
+
+# Podemos ver los detalles del modelo
+logreg_model %>% 
+  parsnip::translate()
+```
+
+**Nota**: para `logistic_reg()` el engine por defecto es `glm`, y el modo por defecto es `classification`, por lo que no es necesario usar el `set_engine()` y `set_mode()`. De todas maneras, yo prefiero incluir las funciones ya que personalmente prefiero ser explícito en los códigos.
+
+### Pre-procesamiento de los datos y Feature engineering
+
+Para este paso usamos la librería `recipes`. En nuestro caso nos interesa:
+
+1. Definir la relación entre predictores y variable respuesta
+2. Definir los datos a utilizar en el ajuste
+3. Definir las transformaciones necesarias a los datos, en particular, queremos centrar y escalar las variables numéricas, así como codificar las variables categóricas.
+
+Lo anterior se encuentra en el siguiente código.
+
+```{r preprocesamiento datos}
+# Creamos la receta
+credit_recipe <- 
+  recipes::recipe(risk ~ ., data = credit_train) %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_normalize(all_predictors())
+
+# Podemos ver los detalles de la receta
+credit_recipe
+```
+
+### Ajuste del modelo
+
+Juntamos todo el proceso en un objeto `workflow` y ajustamos el modelo en los datos de entrenamiento, utilizando la librería `parsnip`.
+
+```{r workflow}
+# Definimos el workflow (o pipeline)
+logreg_wf <-
+  workflows::workflow() %>%
+  add_model(logreg_model) %>%
+  add_recipe(credit_recipe)
+
+# Ajustamos el modelo con parsnip
+logreg_fit <- logreg_wf %>%
+  parsnip::fit(data = credit_train)
+
+# Podemos ver la receta ajustada
+logreg_fit %>%
+  extract_recipe(estimated = TRUE)
+
+# Podemos ver el modelo ajustado
+logreg_fit %>%
+  extract_fit_parsnip() %>%
+  broom::tidy()
+```
+
+A partir del modelo ajustado obtenemos varios valores importantes, entre los cuales se encuentra el valor estimado del parámetro $\beta_i$, junto al valor-p correspondiente.
+
+Recuerden que el intercepto corresponde al logaritmo de la chance de que el cliente tenga un riesgo crediticio alto, **cuando todos los predictores son 0**. ¿Tiene sentido esto en este caso? hint: recuerden que normalizamos las variables antes de realizar el ajuste del modelo. Así, tenemos que
+
+$$
+\log \frac{\theta(0)}{1 - \theta(0)} \approx -0.951 \Rightarrow \theta(0) = \frac{e^{\beta_0}}{1 + e^{\beta_0}} \approx 0.279
+$$
+
+Por último, podemos ver las predicciones del modelo en la base de testeo.
+
+```{r prediccion modelo}
+# Podemos ver las predicciones del modelo y comparar con el real
+credit_test_pred <- credit_test %>% 
+  dplyr::select(risk) %>% 
+  dplyr::mutate(predict(logreg_fit, new_data = credit_test)) %>% 
+  dplyr::rename(risk_pred = .pred_class)
+
+head(credit_test_pred)
+
+## Podemos ver cuantos fueron categorizados como bueno y malo
+credit_test_pred %>% 
+  dplyr::count(risk_pred) %>% 
+  dplyr::mutate(prop = n/sum(n))
+```
+
+### Evaluación del modelo
+
+Notemos que en este caso no estamos evaluando diferentes modelos para ver cuál es mejor ni tampoco tenemos que optimizar hiperparámetros, por lo que podemos evaluar directamente el modelo ajustado en la base de test para ver cómo se defiende ante datos nuevos.
+
+En este caso, una forma que tenemos para evaluar el modelo es usando la librería `tune`. Esta librería tiene una función conveniente llamada `last_fit()`, la cual ajusta el modelo con los datos de entrenamiento y realiza la predicción en la base de test, entregando diferentes métricas. Es importante notar que esta función **recibe la información del split**.
+
+```{r evaluacion del modelo}
+# last_fit ajusta y predice al mismo tiempo
+final_logreg <- 
+  logreg_wf %>% 
+  tune::last_fit(split_info)
+
+# Obtenemos algunas métricas con collect_metrics()
+final_logreg %>% 
+  collect_metrics()
+```
+
+En particular, `last_fit()` nos entrega dos medidas de evaluación: accuracy y roc_auc, pero de momento no nos preocupemos por la segunda. El **accuracy** nos dice la proporción de los datos en la base de testeo que el modelo fue capaz de predecir correctamente. Vemos que en este caso el modelo es capaz de predecir bien aproximadamente el 70% de las veces.
+
+### Todos los pasos juntos
+
+```{r modelamiento completo}
+# 1 - Dividimos los datos
+split_info <- rsample::initial_split(
+  data = credit,
+  prop = 0.75,
+  strata = risk
+)
+
+credit_train <- rsample::training(split_info)
+credit_test <- rsample::testing(split_info)
+
+# 2 - Especificamos el modelo
+logreg_model <- 
+  parsnip::logistic_reg() %>% 
+  set_engine('glm') %>% 
+  set_mode('classification')
+
+# 3 - Creamos la receta
+credit_recipe <- 
+  recipes::recipe(risk ~ ., data = credit_train) %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_normalize(all_predictors())
+
+# 4 - Juntamos todo en un workflow 
+logreg_wf <-
+  workflows::workflow() %>%
+  add_model(logreg_model) %>%
+  add_recipe(credit_recipe)
+
+# 5 - Ajustamos el modelo
+logreg_fit <- logreg_wf %>%
+  parsnip::fit(data = credit_train)
+
+# 6 - Evaluamos el modelo
+logreg_metrics <- logreg_wf %>% 
+  tune::last_fit(split_info) %>% 
+  collect_metrics()
+```

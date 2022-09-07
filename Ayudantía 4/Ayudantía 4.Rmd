@@ -38,23 +38,22 @@ Bienvenid\@s a la cuarta ayudantía de EAA3707 - Machine Learning para Negocios.
 
 1.  Recordatorio modelo de regresión logística
 2.  Supuestos del modelo de regresión logística
-    1. Linealidad del logit
-    2. Independencia de las observaciones
-    3. Test de Hosmer & Lemeshow
-    4. Colinealidad de los predictores
-3. Discusión: Regresión logística altamente no balanceada 
-4. Introducción KNN
+3.  Algunos tests de hipótesis
+3.  Discusión: Regresión logística altamente no balanceada
 
 Antes de comenzar, cargamos las librerías que utilizaremos durante la ayudantía.
 
 ```{r librerias, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(tidymodels)
+library(car)
 
 
 # Para obtener resultados reproducibles
 set.seed(912)
 ```
+
+La librería `car` será utilizada para realizar diferentes tests para evaluar los supuestos del modelo de regresión logística.
 
 Además, les recuerdo los libros que les recomiendo para aprender de R:
 
@@ -159,43 +158,39 @@ luego, $\exp(\beta_j)$ se interpreta como el factor por el que cambian las chanc
 
 # Supuestos del modelo de regresión logística
 
-Cada modelo que proponemos para describir la realidad se basan, algunos en menor medida, en supuestos que hacemos para simplificar el análisis, sin una gran pérdida en generalidad.
+Cada modelo que proponemos para describir la realidad se basan, en mayor o menor medida, supuestos que hacemos para simplificar el análisis, sin una gran pérdida de generalidad.
 
-En particular, el modelo de regresión logística también se basa en ciertos supuestos, pero para entenderlos mejor es más fácil ver los supuestos del modelo de regresión que ya han visto.
+En particular, el modelo de regresión logística también se basa en ciertos supuestos, entre los cuales se encuentran:
 
---
-**Nota**: es probable que ya vieron el tema de los supuestos en su curso de estadística, así que pasaré muy por encima en este caso.
---
+1. Linealidad del logit: recordemos que el modelo plantea que
+$$
+\log \frac{\theta_i}{1 - \theta_i} = x_i^T \beta
+$$
+2. Independencia de las observaciones
+3. No-colinealidad de los predictores
 
-## Supuestos modelo de regresión lineal
+Es importante notar que algunos de estos supuestos pueden ser estudiados de manera visual, antes de ajustar los datos, o de manera más formal, lo cual usualmente se realiza **después** de ajustar el modelo. Es importante notar que los chequeos visuales a veces no sirven mucho, ya que no podemos ver en más de 3 dimensiones.
 
+¿Por qué después? porque aprovechamos las propiedades distribucionales de los datos, con lo cual podemos definir estadísticos muestrales. En particular, en los modelos de regresión es común utilizar los **residuos** $y_i - \hat{y}_i$ y aprovecharnos de algunas propiedades distribucionales asintóticas.
 
+**Nota**: podrán notar que el supuesto de homocedasticidad no está presente en el caso de regresión logística.
 
+## Ejemplo práctico
 
-# Ajuste de un modelo de regresión logística
+Para estudiar los supuestos anteriores, utilizaremos la misma base de datos de la ayudantía pasada, `credit.data`. Recordemos que esta base contiene información crediticia de diferentes clientes de un banco alemán. En particular, se tiene información de 1000 clientes, con sus diferentes atributos, así como una variable que indica si la persona tiene un mal riesgo crediticio.
 
-## Datos a utilizar
+**Nota**: recuerden que pueden acceder a toda la información de los datos en el siguiente [enlace](https://archive-beta.ics.uci.edu/ml/datasets/statlog+german+credit+data)
 
-Pasemos ahora a la parte práctica. La base de datos `credit.data` contiene información crediticia de diferentes clientes de un banco alemán. En particular, la base de datos tiene información de 1000 clientes, con sus diferentes atributos, así como una variable que indica si la persona tiene un buen o mal riesgo crediticio.
-
-Carguemos en primer lugar la base de datos y echemos un vistazo rápido a los datos.
+Carguemos entonces la base de datos en el código a continuación. Además, realizamos el preprocesamiento de eliminar algunas variables, cambiar la codificación y agregar nombres informativos a las variables.
 
 ```{r carga datos, message=FALSE}
-# Cargamos los datos (usaremos RStudio directamente)
+# Cargamos los datos
 credit_full <- readr::read_table(
-  file = here::here('Ayudantía 3', 'german.data'), 
+  file = here::here('Ayudantía 4', 'german.data'), 
   col_names = FALSE
 )
 
-# Echamos un vistazo a los datos
-dplyr::glimpse(credit_full)
-```
-
-A partir de lo anterior notamos que la base de datos viene sin nombres de las columnas, y que los valores vienen codificados en un formato que no sabemos a qué se refieren. En estos casos lo mejor es ver la fuente de los datos, que en este caso los obtuve del [Machine Learning Repository](https://archive-beta.ics.uci.edu/ml/datasets/statlog+german+credit+data) de la University of California, Irvine. De ahí obtenemos que las variables corresponden a, por ejemplo, el estado actual de la cuenta corriente, la duración en meses del crédito y el propósito del crédito.
-
-Para simplificar el análisis solo utilizaremos los atributos 2, 3, 5, 13, 15, 16 y obviamente nuestra variable respuesta. En el código a continuación realizamos esta selección, colocamos nombres explicativos y cambiamos las variables cualitativas a factor. Cambiaré también la codificación de `housing`, pero solo para mostrar cómo se hace.
-
-```{r selección y nombres}
+# Pre-procesamiento de los datos
 credit <- 
   credit_full %>% 
   dplyr::select(X2, X3, X5, X13, X15, X16, X21) %>% 
@@ -205,45 +200,117 @@ credit <-
                 age = X13,
                 housing = X15,
                 n_credits = X16,
-                risk = X21) %>% 
+                risk = X21) %>%
+  dplyr::mutate(risk = risk - 1) %>% # Parte nueva
   dplyr::mutate(housing = dplyr::recode(housing, 
                                         "A151" = 'rent',
                                         "A152" = 'own',
                                         "A153" = 'free'),
                 risk = dplyr::recode(risk,
-                                     `1` = 'good',
-                                     `2` = 'bad')) %>% 
+                                     `0` = 'good',
+                                     `1` = 'bad')) %>% 
   dplyr::mutate(across(where(is.character), as_factor))
 
-# Veamos nuevamente los datos pero ahora arreglados
+# Vemos cómo nos quedan
 dplyr::glimpse(credit)
 ```
 
-Ya teniendo nuestros datos listos, realizamos un pequeño análisis exploratorio.
+Ya teniendo nuestros datos listos, pasamos a ver el primer supuesto, que es el de la linealidad del logit.
 
-## Análisis exploratorio
+## Linealidad del logit (visual)
 
-En primer lugar, nos interesa saber la proporción de clientes con un buen riesgo crediticio, así como con mal riesgo. Esto lo vemos en el código a continuación:
+Con un predictor $x$ podemos graficar las proporciones muestrales $\sum y_i/n_i$ versus $x_i$, donde $n_i$ es el número de observaciones con valor del predictor $x_i$, lo cual debiese tener forma de S. Equivalentemente, podemos graficar los logitos muestrales versus $x_i$ lo cual debería ser aproximadamente lineal. Pero, ¿cuáles son los problemas con este enfoque?
 
-```{r proporcion riesgo}
-credit %>% 
-  dplyr::count(risk) %>% 
-  dplyr::mutate(prop = n/sum(n))
+Primero, si $x$ es continuo, podemos tener que $n_i = 1$ para muchos valores, por lo cual nisiquiera podríamos calcular el logito (obtendríamos $-\infty$ o $\infty$). Una solución sería una pequeña corrección para evitar estos valores problemáticos. Además, si siempre se tiene $n_i = 1$ entonces $y_i/n_i$ tendría solo dos valores posibles, por lo que no podríamos visualizar bien.
+
+Otro problema importante es que esta técnica funcionaría solo en el caso de un predictor (o a lo más dos si usamos gráficos 3D), pero no para los casos generales que son más comunes. Además, puede ser que si vemos gráficos 2D por separado pensemos que la relación no es lineal, pero al verlo de manera conjunta sí existe esta relación.
+
+De todas maneras, veamos dos ejemplo visuales. Primero utilizaremos la variable `Age` que no tiene los problemas de muchos $n_i = 1$:
+
+```{r ejemplo Age, fig.align='center'}
+# Podemos contar según la edad, vemos que existe un n_i = 1
+age_freqs <- credit %>% 
+  dplyr::count(age, name = 'total')
+age_freqs
+any(age_freqs$total == 1)
+sum(age_freqs$total == 1)
+
+# Agrupamos por edad y calculamos las proporciones y logitos muestrales
+prop_logit <- credit %>% 
+  dplyr::group_by(age, risk, .drop = FALSE) %>% 
+  dplyr::count() %>% 
+  dplyr::filter(risk == 'bad') %>% 
+  dplyr::left_join(age_freqs) %>% 
+  dplyr::mutate(prop = n/total)
+
+logitos <- car::logit(prop_logit$prop, adjust = 0.01)
+prop_logit$logitos = logitos
+
+# Graficamos
+## Proporciones
+ggplot(prop_logit, mapping = aes(x = age, y = prop)) +
+  geom_point() +
+  labs(title = 'Análisis visual proporciones muestrales',
+       subtitle = 'Usando la variable Age',
+       x = 'Edad', y = 'Proporción muestral')
+
+## Logitos
+ggplot(prop_logit, mapping = aes(x = age, y = logitos)) +
+  geom_point() +
+  labs(title = 'Análisis visual linealidad del logito',
+       subtitle = 'Usando la variable Age',
+       x = 'Edad', y = 'Proporción muestral')
 ```
 
-Vemos entonces que el 30% de los clientes tiene un mal riesgo crediticio.
+A través del gráfico podemos ver que al parecer no se cumple el supuesto de linealidad del logito **si sólo consideramos la variable Age**.
 
-Además, nos interesa ver las posibles relaciones entre las variables predictoras y la variable respuesta. Una opción sería ver cómo distribuyen las edades de las personas al separar por el riesgo, lo cual vemos en el gráfico a continuación.
+Ahora veamos una variable continua, en particular la variable `credit_amount`. En el caso continuo, si no se repiten mucho los valores, es conveniente agrupar los datos en categorías.
 
-```{r relacion edad riesgo, echo=FALSE}
-ggplot(data = credit,
-       mapping = aes(x = risk, y = age, fill = risk)) +
-  geom_boxplot() +
-  labs(x = 'riesgo', y = 'edad',
-       title = 'Relación edad y riesgo del cliente')
+```{r ejemplo credit amount, fig.align='center'}
+# Podemos contar según la edad, vemos que en este caso hay 847 n_i = 1
+am_freqs <- credit %>% 
+  dplyr::count(credit_amount, name = 'total')
+am_freqs
+sum(am_freqs$total == 1)
+
+# Agrupamos las edades en intervalos
+binned <- credit %>% 
+  dplyr::mutate(amount_bin = cut(credit_amount, breaks = 10, labels = FALSE)) %>% 
+  dplyr::select(credit_amount, amount_bin, risk)
+
+amb_freqs <- binned %>% 
+  dplyr::count(amount_bin, name = 'total')
+
+amb_freqs
+
+# Realizamos el conteo y calculamos proporciones y logitos
+prop_logit <- binned %>% 
+  dplyr::group_by(amount_bin, risk, .drop = FALSE) %>% 
+  dplyr::count() %>% 
+  dplyr::filter(risk == 'bad') %>% 
+  dplyr::left_join(amb_freqs) %>% 
+  dplyr::mutate(prop = n/total)
+
+logitos <- car::logit(prop_logit$prop, adjust = 0.01)
+prop_logit$logitos = logitos
+
+# Graficamos
+## Proporciones
+ggplot(prop_logit, mapping = aes(x = amount_bin, y = prop)) +
+  geom_point() +
+  labs(title = 'Análisis visual proporciones muestrales',
+       subtitle = 'Usando la variable Credit Amount',
+       x = 'Monto del crédito ajustado', y = 'Proporción muestral')
+
+## Logitos
+ggplot(prop_logit, mapping = aes(x = amount_bin, y = logitos)) +
+  geom_point() +
+  labs(title = 'Análisis visual linealidad del logito',
+       subtitle = 'Usando la variable Credit Amount',
+       x = 'Monto del crédito ajustado', y = 'Proporción muestral')
 ```
 
-Notamos que la edad de las personas con un riesgo bajo tiene una mediana mayor que las de riesgo alto, pero que ambos riesgos tienen personas de todas las edades. Les dejo a ustedes ver otras formas de poder analizar de manera exploratoria los datos.
+Vemos que en este caso sí pareciera existir una pequeña relación lineal **sólo si consideramos el monto del crédito**.
 
 ## Modelamiento
 

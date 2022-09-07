@@ -78,19 +78,19 @@ prop_logit <- credit %>%
   dplyr::mutate(prop = n/total)
 
 logitos <- car::logit(prop_logit$prop, adjust = 0.01)
-prop_logit$logitos = logitos
+prop_logit$logitos <- logitos
 
 # Graficamos
 ## Proporciones
 ggplot(prop_logit, mapping = aes(x = age, y = prop)) +
-  geom_point() +
+  geom_point(size = 6) +
   labs(title = 'Análisis visual proporciones muestrales',
        subtitle = 'Usando la variable Age',
        x = 'Edad', y = 'Proporción muestral')
 
 ## Logitos
 ggplot(prop_logit, mapping = aes(x = age, y = logitos)) +
-  geom_point() +
+  geom_point(size = 6) +
   labs(title = 'Análisis visual linealidad del logito',
        subtitle = 'Usando la variable Age',
        x = 'Edad', y = 'Logito muestral')
@@ -109,7 +109,6 @@ binned <- credit %>%
 
 amb_freqs <- binned %>% 
   dplyr::count(amount_bin, name = 'total')
-
 amb_freqs
 
 # Realizamos el conteo y calculamos proporciones y logitos
@@ -121,19 +120,19 @@ prop_logit <- binned %>%
   dplyr::mutate(prop = n/total)
 
 logitos <- car::logit(prop_logit$prop, adjust = 0.01)
-prop_logit$logitos = logitos
+prop_logit$logitos <- logitos
 
 # Graficamos
 ## Proporciones
 ggplot(prop_logit, mapping = aes(x = amount_bin, y = prop)) +
-  geom_point() +
+  geom_point(size = 6) +
   labs(title = 'Análisis visual proporciones muestrales',
        subtitle = 'Usando la variable Credit Amount',
        x = 'Monto del crédito ajustado', y = 'Proporción muestral')
 
 ## Logitos
 ggplot(prop_logit, mapping = aes(x = amount_bin, y = logitos)) +
-  geom_point() +
+  geom_point(size = 6) +
   labs(title = 'Análisis visual linealidad del logito',
        subtitle = 'Usando la variable Credit Amount',
        x = 'Monto del crédito ajustado', y = 'Logito muestral')
@@ -203,7 +202,7 @@ ggplot(data = aux, mapping = aes(x = ajust, y = res)) +
 
 # Agrupamos nuevamente
 aux2 <- aux %>% 
-  dplyr::mutate(ajust_bin = cut(ajust, breaks = 20, labels = FALSE)) %>% 
+  dplyr::mutate(ajust_bin = cut(ajust, breaks = 30, labels = FALSE)) %>% 
   dplyr::group_by(ajust_bin) %>% 
   dplyr::summarise(res_medio = mean(res))
 

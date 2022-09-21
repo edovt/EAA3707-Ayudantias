@@ -1,0 +1,93 @@
+---
+title: "Ayudantía 5 - ML para Negocios"
+date: "21 de septiembre del 2022"
+output:
+  rmdformats::downcute:
+    self_contained: true
+    default_style: "light"
+    downcute_theme: "default"
+---
+
+```{=html}
+<style type="text/css">
+body{
+  font-size: 15pt;
+}
+.Wrap {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+```
+
+```{r setup, include=FALSE, message=FALSE}
+library(here)
+
+
+## Global options
+knitr::opts_chunk$set(cache = TRUE)
+
+# Here
+here::i_am('Ayudantía 5/Ayudantía 5.Rmd')
+```
+
+# Introducción
+
+Bienvenid\@s a la quinta ayudantía de EAA3707 - Machine Learning para Negocios. En la ayudantía veremos:
+
+1.  K-Nearest Neighbors
+2.  Aplicación en regresión
+3.  Elección del número de vecinos
+3.  Discusión: Curse of dimensionality
+
+Antes de comenzar, cargamos las librerías que utilizaremos durante la ayudantía.
+
+```{r librerias, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(tidymodels)
+
+
+# Para obtener resultados reproducibles
+set.seed(912)
+```
+
+Les recuerdo los libros que les recomiendo para aprender de R:
+
+-   **Hands-On Programming with R**: disponible [acá](https://rstudio-education.github.io/hopr/). Útil para recordar cosas básicas de R.
+
+-   **Advanced R**: disponible [acá](https://adv-r.hadley.nz/). Para aprender R avanzado (realmente avanzado), si es que están interesados en entender cómo funciona R por detrás.
+
+-   **R for Data Science**: disponible [acá](https://r4ds.had.co.nz/). Bueno para aprender y aplicar Data Science de manera rápida, además de ser uno de los libros guía para aprender acerca de los paquetes de tidyverse.
+
+-   **RMarkdown Cookbook**: disponible [acá](https://bookdown.org/yihui/rmarkdown-cookbook/). Útil para aprender lo básico de RMarkdown.
+
+-   **RMarkdown: The Definitive Guide**: disponible [acá](https://bookdown.org/yihui/rmarkdown/). Útil para aprender cosas avanzadas de RMarkdown.
+
+-   **Tidy Modeling with R**: disponible [acá](https://www.tmwr.org/). Recomendado para aprender del ecosistema tidymodels. Tiene también un capítulo pequeño de tidyverse con lo justo y necesario.
+
+# Algoritmo K-vecinos cercanos (KNN)
+
+<center>![Algoritmo K-vecinos cercanos](https://www.jcchouinard.com/wp-content/uploads/2021/08/image-8.png)</center>
+
+El algoritmo K-vecinos cercanos (KNN) es uno de los algoritmos de aprendizaje supervisado más simples e intuitivos, y el cual puede ser utilizado tanto en el contexto de regresión como en el de clasificación.
+
+Este algoritmo realizará la predicción de acuerdo a un número $k$ de vecinos que se encuentren más cercanos a la observación. En particular, en el contexto de clasificación, tendremos que la observación se asignará a la clase con un mayor número de instancias dentro de estos vecinos, mientras que en el caso de regresión se toma un promedio de las respuestas.
+
+Con lo anterior podemos notar que este método no realiza ningún ajuste por detrás, como lo hace por ejemplo una regresión lineal o logística para obtener estimaciones de los parámetros que definen aquellos modelos.
+
+Acá es MUY importante tener siempre en cuenta que este método trabaja con el concepto de distancia entre observaciones. En nuestro caso trabajaremos con distancia euclideana, pero si investigan notaran que existen otras distancias, las que también pueden depender del tipo de dato con el que trabajen (por ejemplo distancias entre palabras)
+
+Considerando lo anterior, si nuestros predictores están en escalas diferentes entonces será necesario estandarizar nuestros datos. Por ejemplo, si queremos comparar casas entre sí y tenemos tanto el precio en pesos como el tamaño en metros cuadrados, entonces las diferencias de precios, que estarán por los millones, dominará completamente la distancia entre observaciones.
+
+# Aplicación - 
+
+En clases ya vieron el uso del algoritmo KNN para el caso que la variable respuesta es categórica, por lo que acá consideraremos el otro caso correspondiente a una variable respuesta numérica.
+
+En particular, si denotamos por $N_k(x)$ el conjunto de las k observaciones más cercanas a x, entonces tenemos que el estimador KNN está dado por:
+
+$$
+\hat{Y}(x) = \frac{1}{k}\sum_{x_i \in N_k(x)} y_i
+$$
+
+

@@ -4,7 +4,7 @@ date: "21 de septiembre del 2022"
 output:
   rmdformats::downcute:
     self_contained: true
-    default_style: "light"
+    default_style: "dark"
     downcute_theme: "default"
 ---
 
@@ -26,7 +26,7 @@ library(here)
 
 
 ## Global options
-knitr::opts_chunk$set(cache = TRUE)
+knitr::opts_chunk$set(cache = TRUE, fig.align = 'center')
 
 # Here
 here::i_am('Ayudantía 5/Ayudantía 5.Rmd')
@@ -68,7 +68,7 @@ Les recuerdo los libros que les recomiendo para aprender de R:
 
 # Algoritmo K-vecinos cercanos (KNN)
 
-<center>![Algoritmo K-vecinos cercanos](https://www.jcchouinard.com/wp-content/uploads/2021/08/image-8.png)</center>
+<center>![Algoritmo K-vecinos cercanos](https://www.jcchouinard.com/wp-content/uploads/2021/08/image-8.png){height=500px width=750px}</center>
 
 El algoritmo K-vecinos cercanos (KNN) es uno de los algoritmos de aprendizaje supervisado más simples e intuitivos, y el cual puede ser utilizado tanto en el contexto de regresión como en el de clasificación.
 
@@ -76,11 +76,13 @@ Este algoritmo realizará la predicción de acuerdo a un número $k$ de vecinos 
 
 Con lo anterior podemos notar que este método no realiza ningún ajuste por detrás, como lo hace por ejemplo una regresión lineal o logística para obtener estimaciones de los parámetros que definen aquellos modelos.
 
-Acá es MUY importante tener siempre en cuenta que este método trabaja con el concepto de distancia entre observaciones. En nuestro caso trabajaremos con distancia euclideana, pero si investigan notaran que existen otras distancias, las que también pueden depender del tipo de dato con el que trabajen (por ejemplo distancias entre palabras)
+Acá es **MUY** importante tener siempre en cuenta que este método trabaja con el concepto de distancia entre observaciones. En nuestro caso trabajaremos con distancia euclideana, pero si investigan notaran que existen otras distancias, las que también pueden depender del tipo de dato con el que trabajen (por ejemplo distancias entre palabras)
 
 Considerando lo anterior, si nuestros predictores están en escalas diferentes entonces será necesario estandarizar nuestros datos. Por ejemplo, si queremos comparar casas entre sí y tenemos tanto el precio en pesos como el tamaño en metros cuadrados, entonces las diferencias de precios, que estarán por los millones, dominará completamente la distancia entre observaciones.
 
-# Aplicación - 
+# Aplicación - Transacciones de bienes raíces
+
+<center>![](https://www.vmcdn.ca/f/files/kamloopsmatters/images/stock-photos/housing/home-for-sale.jpg;w=960){height=500px width=900px}</center>
 
 En clases ya vieron el uso del algoritmo KNN para el caso que la variable respuesta es categórica, por lo que acá consideraremos el otro caso correspondiente a una variable respuesta numérica.
 
@@ -89,5 +91,41 @@ En particular, si denotamos por $N_k(x)$ el conjunto de las k observaciones más
 $$
 \hat{Y}(x) = \frac{1}{k}\sum_{x_i \in N_k(x)} y_i
 $$
+
+Como una aplicación práctica, utilizaremos la base de datos `Sacramento` la cual contiene información de 932 transacciones de bienes raíces en el condado de Sacramento, California. En particular, nos interesa poder predecir el precio al que se venderá una casa utilizando diferentes atributos como el tamaño de la casa, el número de piezas, el número de baños, etc.
+
+**Nota**: estos datos vienen en la librería `modeldata`, la cual se carga automáticamente al cargar la librería `tidymodels`. Para más información de la base de datos, pueden utilizar `?Sacramento`.
+
+Para simplificar el análisis y poder visualizar de mejor manera los resultados utilizaremos solo la variable `sqft` para poder predecir el precio. La extensión del algoritmo al caso multivariado es directo, aunque hay que tener cuidado con respecto a las diferencias de magnitudes entre variables, así como el tipo de variable.
+
+## Análisis exploratorio
+
+Dado que nos interesa predecir el precio, veamos en primer lugar cómo distribuye esta variable.
+
+```{r ae - precio, echo=FALSE}
+ggplot(Sacramento, aes(x = price)) +
+  geom_histogram(aes(y = ..density..), bins = 30, col = 'black', fill = 'salmon') +
+  geom_density(col = 'blue', lwd = 2) +
+  scale_x_continuous(labels = dollar_format()) +
+  theme(text = element_text(size = 12)) +
+  labs(title = 'Distribución del precio de las casas',
+       subtitle = 'Condado de Sacramento, California',
+       x = 'Precio (Dólares)', y = 'Densidad')
+```
+
+Por otro lado, considerando que nos interesa poder predecir el precio de venta a partir del tamaño en metros cuadrados de la casa, graficamos ambas variables en la misma figura.
+
+```{r ae - relacion sqft y precio, echo=FALSE}
+ggplot(Sacramento, aes(x = sqft, y = price)) +
+  geom_point() +
+  theme(text = element_text(size = 12)) + 
+  scale_y_continuous(labels = dollar_format()) +
+  labs(title = 'Relación tamaño y precio',
+       subtitle = 'Condado de Sacramento, California',
+       x = 'Tamaño', y = 'Precio (Dólares)')
+```
+
+Notamos que efectivamente a medida que el tamaño de la casa aumenta entonces el precio también tiende a aumentar.
+
 
 

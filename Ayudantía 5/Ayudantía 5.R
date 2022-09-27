@@ -9,6 +9,9 @@ library(udunits2)
 set.seed(2211)
 
 # Análisis exploratorio -------------------------------------------------------------
+# Cambio de unidades
+Sacramento$sqm <- udunits2::ud.convert(Sacramento$sqft, 'ft', 'm')
+
 # Precio
 ggplot(Sacramento, aes(x = price)) +
   geom_histogram(aes(y = ..density..), bins = 30, col = 'black', fill = 'salmon') +

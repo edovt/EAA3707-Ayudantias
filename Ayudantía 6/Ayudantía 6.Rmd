@@ -1,0 +1,85 @@
+---
+title: "Ayudantía 6 - ML para Negocios"
+date: "05 de octubre del 2022"
+output:
+  rmdformats::downcute:
+    self_contained: true
+    default_style: "dark"
+    downcute_theme: "default"
+---
+
+```{=html}
+<style type="text/css">
+body{
+  font-size: 15pt;
+}
+.Wrap {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+```
+
+```{r setup, include=FALSE, message=FALSE}
+library(here)
+
+
+## Global options
+knitr::opts_chunk$set(cache = TRUE, fig.align = 'center',
+                      fig.height = 6, fig.width = 10)
+
+# Here
+here::i_am('Ayudantía 6/Ayudantía 6.Rmd')
+```
+
+# Introducción
+
+Bienvenid\@s a la sexta ayudantía de EAA3707 - Machine Learning para Negocios. En la ayudantía veremos:
+
+1.  Support Vector Machines (SVM)
+
+Antes de comenzar, cargamos las librerías que utilizaremos durante la ayudantía.
+
+```{r librerias, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(tidymodels)
+
+
+# Para obtener resultados reproducibles
+set.seed(219)
+```
+
+Les recuerdo los libros que les recomiendo para aprender de R:
+
+-   **Hands-On Programming with R**: disponible [acá](https://rstudio-education.github.io/hopr/). Útil para recordar cosas básicas de R.
+
+-   **Advanced R**: disponible [acá](https://adv-r.hadley.nz/). Para aprender R avanzado (realmente avanzado), si es que están interesados en entender cómo funciona R por detrás.
+
+-   **R for Data Science**: disponible [acá](https://r4ds.had.co.nz/). Bueno para aprender y aplicar Data Science de manera rápida, además de ser uno de los libros guía para aprender acerca de los paquetes de tidyverse.
+
+-   **RMarkdown Cookbook**: disponible [acá](https://bookdown.org/yihui/rmarkdown-cookbook/). Útil para aprender lo básico de RMarkdown.
+
+-   **RMarkdown: The Definitive Guide**: disponible [acá](https://bookdown.org/yihui/rmarkdown/). Útil para aprender cosas avanzadas de RMarkdown.
+
+-   **Tidy Modeling with R**: disponible [acá](https://www.tmwr.org/). Recomendado para aprender del ecosistema tidymodels. Tiene también un capítulo pequeño de tidyverse con lo justo y necesario.
+
+# Support Vector Machines
+
+<center>![SVM](http://res.cloudinary.com/dyd911kmh/image/upload/f_auto,q_auto:best/v1526288453/index3_souoaz.png){height="500px" width="750px"}</center>
+
+Las Máquinas de Vector Soporte (SVM) son un modelo de aprendizaje supervisado el cual, a partir de hiperplanos, separa de forma óptima los puntos de una clase y otra. El concepto fundamental es el de "separación óptima", donde se busca el hiperplano que tenga la máxima distancia (margen) con los puntos que estén más cerca de él mismo.
+
+Es importante recordar que un hiperplano p-dimensional está dado por
+$$
+h_w(x) = w^tx + b = 0
+$$
+
+donde $w, x \in \mathbb{R}^p$. Estos hiperplanos dividen el espacio en dos, uno con $h_w(x) > 0$ y otro con $h_w(x) < 0$, lo cual al unir con los $x$ tal que $h_w(x) = 0$ nos entrega el espacio original.
+
+¿Qué es lo que buscamos entonces al ajustar el modelo? lo que buscamos es justamente encontrar este hiperplano $h_w(x)$ que separe de manera "óptima". Por ejemplo, en el caso binario de clasificación, nos interesaría encontrar el hiperplano tal que $h_w(x_i) \geq 0$ para una categoría y $h_w(x_i) < 0$ para otra categoría. Es importante notar que lo anterior no siempre es posible de manera perfecta, y en el caso que sí lo sea diremos que el problema es **perfectamente separable**.
+
+En el caso anterior, si denotamos las categorías por $\pm 1$ entonces queremos encontrar el hiperplano tal que $y_ih_w(x_i) \geq 0$ para todo $i = 1, ...,n$.
+
+
+# Aplicación - 

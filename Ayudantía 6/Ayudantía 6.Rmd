@@ -2,18 +2,31 @@
 title: "Ayudantía 6 - ML para Negocios"
 date: "05 de octubre del 2022"
 output:
-  rmdformats::downcute:
-    self_contained: true
-    default_style: "dark"
-    downcute_theme: "default"
+  html_document:
+    df_print: paged
+    theme: flatly
+    highlight: breezedark
+    toc: yes
+    toc_float: yes
 ---
 
 ```{=html}
 <style type="text/css">
+/* Whole document: */
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible&display=swap');
 body{
+  font-family: 'Atkinson Hyperlegible', sans-serif;
   font-size: 15pt;
+  background-color: #f2f3ed;
+	
 }
-.Wrap {
+/* Headers */
+h1,h2,h3,h4,h5,h6{
+  font-size: 20pt;
+ font-color:#03DAC6; 
+}
+
+div.main-container {
   max-width: 1800px;
   margin-left: auto;
   margin-right: auto;
@@ -26,11 +39,13 @@ library(here)
 
 
 ## Global options
-knitr::opts_chunk$set(cache = TRUE, fig.align = 'center',
-                      fig.height = 6, fig.width = 10)
+knitr::opts_chunk$set(
+  cache = TRUE, fig.align = "center",
+  fig.height = 6, fig.width = 10
+)
 
 # Here
-here::i_am('Ayudantía 6/Ayudantía 6.Rmd')
+here::i_am("Ayudantía 6/Ayudantía 6.Rmd")
 ```
 
 # Introducción
@@ -44,11 +59,16 @@ Antes de comenzar, cargamos las librerías que utilizaremos durante la ayudantí
 ```{r librerias, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(tidymodels)
+library(LiblineaR)
+library(kernlab)
 
 
 # Para obtener resultados reproducibles
 set.seed(219)
 ```
+
+Las librerías `LiblineaR` y `kernlab` son las que contienen los modelos que acepta `svm_linear` de parsnip como motor.
+
 
 Les recuerdo los libros que les recomiendo para aprender de R:
 
@@ -70,6 +90,8 @@ Les recuerdo los libros que les recomiendo para aprender de R:
 
 Las Máquinas de Vector Soporte (SVM) son un modelo de aprendizaje supervisado el cual, a partir de hiperplanos, separa de forma óptima los puntos de una clase y otra. El concepto fundamental es el de "separación óptima", donde se busca el hiperplano que tenga la máxima distancia (margen) con los puntos que estén más cerca de él mismo.
 
+**Nota**: SVM también puede ser utilizado para regresión.
+
 Es importante recordar que un hiperplano p-dimensional está dado por
 $$
 h_w(x) = w^tx + b = 0
@@ -79,7 +101,108 @@ donde $w, x \in \mathbb{R}^p$. Estos hiperplanos dividen el espacio en dos, uno 
 
 ¿Qué es lo que buscamos entonces al ajustar el modelo? lo que buscamos es justamente encontrar este hiperplano $h_w(x)$ que separe de manera "óptima". Por ejemplo, en el caso binario de clasificación, nos interesaría encontrar el hiperplano tal que $h_w(x_i) \geq 0$ para una categoría y $h_w(x_i) < 0$ para otra categoría. Es importante notar que lo anterior no siempre es posible de manera perfecta, y en el caso que sí lo sea diremos que el problema es **perfectamente separable**.
 
-En el caso anterior, si denotamos las categorías por $\pm 1$ entonces queremos encontrar el hiperplano tal que $y_ih_w(x_i) \geq 0$ para todo $i = 1, ...,n$.
+**Nota**: cuando hablamos de "encontrar" el hiperplano lo que buscamos entonces es $w$ y $b$.
+
+En el caso anterior, si denotamos las categorías por $\pm 1$ entonces queremos encontrar el hiperplano tal que $y_ih_w(x_i) \geq 0$ para todo $i = 1, ...,n$. Ahora, pueden existir muchos hiperplanos que cumplan lo anterior, así que elegimos el "mejor" como el que maximice el margen con respecto a los puntos de las clases, lo cual se representa a través del problema de optimización dado por
+
+$$
+\min_{w, b} \frac{||w||^2}{2}, \quad \text{sujeto a} \;\; y_i(w^tx + b) \geq 1
+$$
+
+Ahora, ¿qué pasa si los datos no son linealmente separables?. Para acomodar el modelo anterior a este caso se introducen las variables **slack** $\xi_i$ obteniendo el nuevo problema de optimización dado por
+
+$$
+\min_{w, b, \xi}\frac{||w||^2}{2} + C\sum_{i=1}^n \xi_i
+$$
+
+sujeto a $y_i(w^Tx_i + b) \geq 1 - \xi_i$, $\xi_i \geq 0$.
 
 
-# Aplicación - 
+# Aplicación - Predicción de quiebra
+
+<center>![](https://cdn.laruta.io/app/uploads/sites/7/2022/02/22171717/Bankruptcy-1.jpeg){height="500px" width="750px"}</center>
+
+Para aplicar de manera práctica el modelo SVM, utilizaremos la base de datos `bankruptcy.csv`, obtenida del [repositorio](https://archive-beta.ics.uci.edu/ml/datasets/taiwanese+bankruptcy+prediction#Abstract) de datos de UC Irvine.
+
+Esta base de datos contiene información de compañías taiwanesas entre los años 1999 y 2009 como el ROA, ventas netas, tasas, valor neto, etc., así como la definición como compañía en bancarrota o no según las regulaciones de la Bolsa de Valores de Taiwán. Nos gustaría entonces predecir si una empresa, dada sus actuales características, está en riesgo o no.
+
+## Análisis exploratorio
+
+En primer lugar, cargamos nuestros datos.
+
+```{r}
+bankruptcy <- read_csv(here("Ayudantía 6", "bankruptcy.csv"),
+  show_col_types = FALSE
+)
+head(bankruptcy, 8)
+```
+
+Lo primero que podemos notar es que la variable `Bankrupt?` categórica está como numérica, por lo que la pasamos a factor (de pasada también le cambiamos el nombre)
+
+```{r}
+bankruptcy$`Bankrupt?` <- as.factor(bankruptcy$`Bankrupt?`)
+bankruptcy <- dplyr::rename(bankruptcy, bankrupt = `Bankrupt?`)
+glimpse(bankruptcy)
+```
+
+Otra cosa importante es notar la gran diferencia de observaciones entre ambas clases, lo cual podemos ver a continuación:
+
+```{r}
+table(bankruptcy$bankrupt)
+```
+
+Por último, y **solo** para facilitar un poco la ayudantía, elegiré al azar algunas de las columnas de la base de datos para utilizar.
+
+```{r}
+bankruptcy <- bankruptcy[, c(1, 2, 5, 9, 10, 14, 19, 24, 29, 33, 37, 48, 51, 56, 66, 72)]
+```
+
+Ya con esto podemos ver, por ejemplo, un gráfico de correlación entre las variables predictoras, o la distribución de éstas separando por la clase.
+
+```{r, echo=FALSE}
+dplyr::select(bankruptcy, -bankrupt) %>%
+  as.data.frame() %>%
+  cor() %>%
+  ggcorrplot::ggcorrplot()
+```
+
+```{r, echo=FALSE}
+bankruptcy %>%
+  tidyr::pivot_longer(!bankrupt, names_to = "features", values_to = "values") %>%
+  ggplot(aes(x = bankrupt, y = log(values), fill = features)) +
+  geom_boxplot() +
+  facet_wrap(~features, scales = "free", ncol = 4) +
+  scale_color_viridis_d(option = "plasma", end = .7) +
+  theme(legend.position = "none")
+```
+
+## Modelo de clasificación
+
+Como lo hemos hecho en las ayudantías pasadas, realizamos los primeros pasos típicos con tidymodels en el código a continuación. Es importante que para esta ayudantía utilizaremos `svm_linear`, donde para la siguiente exploraremos las otras opciones.
+
+Para la especificación del modelo, tunearemos el parámetro de costo $C$, como aparece más arriba en el problema de optimización.
+
+```{r}
+# 1. División de los datos
+bankruptcy_split <- rsample::initial_split(
+  data = bankruptcy,
+  strata = bankrupt
+)
+
+bankruptcy_train <- rsample::training(bankruptcy_split)
+bankruptcy_test <- rsample::training(bankruptcy_split)
+
+# 2. Especificación del modelo
+bank_model <- parsnip::svm_linear(cost = tune()) %>% 
+  set_engine("LiblineaR") %>% 
+  set_mode("classification")
+
+# 3. Especificación de la receta
+bank_recipe <- recipes::recipe(bankrupt ~ ., data = bankruptcy_train) %>% 
+  step_normalize(all_predictors())
+```
+
+
+
+
+

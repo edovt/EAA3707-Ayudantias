@@ -41,7 +41,7 @@ library(here)
 ## Global options
 knitr::opts_chunk$set(
   cache = TRUE, fig.align = "center",
-  fig.height = 6, fig.width = 10
+  fig.height = 7, fig.width = 12
 )
 
 # Here
@@ -59,6 +59,7 @@ Antes de comenzar, cargamos las librerías que utilizaremos durante la ayudantí
 ```{r librerias, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(tidymodels)
+library(ggcorrplot)
 library(LiblineaR)
 library(kernlab)
 
@@ -131,17 +132,17 @@ Esta base de datos contiene información de compañías taiwanesas entre los añ
 En primer lugar, cargamos nuestros datos.
 
 ```{r}
-bankruptcy <- read_csv(here("Ayudantía 6", "bankruptcy.csv"),
-  show_col_types = FALSE
-)
+bankruptcy <- read_csv(here("Ayudantía 6", "bankruptcy.csv"), show_col_types = FALSE)
 head(bankruptcy, 8)
 ```
 
 Lo primero que podemos notar es que la variable `Bankrupt?` categórica está como numérica, por lo que la pasamos a factor (de pasada también le cambiamos el nombre)
 
 ```{r}
-bankruptcy$`Bankrupt?` <- as.factor(bankruptcy$`Bankrupt?`)
-bankruptcy <- dplyr::rename(bankruptcy, bankrupt = `Bankrupt?`)
+bankruptcy <- bankruptcy %>% 
+  dplyr::rename(bankrupt = `Bankrupt?`) %>% 
+  dplyr::mutate(bankrupt = factor(bankrupt, levels = c("1", "0"),
+                                  labels = c("Yes", "No")))
 glimpse(bankruptcy)
 ```
 
@@ -154,7 +155,7 @@ table(bankruptcy$bankrupt)
 Por último, y **solo** para facilitar un poco la ayudantía, elegiré al azar algunas de las columnas de la base de datos para utilizar.
 
 ```{r}
-bankruptcy <- bankruptcy[, c(1, 2, 5, 9, 10, 14, 19, 24, 29, 33, 37, 48, 51, 56, 66, 72)]
+bankruptcy <- bankruptcy[, c(1, 2, 5, 9, 14, 24, 29, 33, 48, 51, 56, 66, 72)]
 ```
 
 Ya con esto podemos ver, por ejemplo, un gráfico de correlación entre las variables predictoras, o la distribución de éstas separando por la clase.
@@ -166,7 +167,7 @@ dplyr::select(bankruptcy, -bankrupt) %>%
   ggcorrplot::ggcorrplot()
 ```
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 bankruptcy %>%
   tidyr::pivot_longer(!bankrupt, names_to = "features", values_to = "values") %>%
   ggplot(aes(x = bankrupt, y = log(values), fill = features)) +
@@ -178,9 +179,9 @@ bankruptcy %>%
 
 ## Modelo de clasificación
 
-Como lo hemos hecho en las ayudantías pasadas, realizamos los primeros pasos típicos con tidymodels en el código a continuación. Es importante que para esta ayudantía utilizaremos `svm_linear`, donde para la siguiente exploraremos las otras opciones.
+Como lo hemos hecho en las ayudantías pasadas, realizamos los primeros pasos típicos con tidymodels en el código a continuación. Es importante que para esta ayudantía utilizaremos solo `svm_linear`, y para la siguiente exploraremos las otras opciones.
 
-Para la especificación del modelo, tunearemos el parámetro de costo $C$, como aparece más arriba en el problema de optimización.
+Para la especificación del modelo, tunearemos el parámetro de costo $C$ que aparece más arriba en el problema de optimización.
 
 ```{r}
 # 1. División de los datos
@@ -190,19 +191,164 @@ bankruptcy_split <- rsample::initial_split(
 )
 
 bankruptcy_train <- rsample::training(bankruptcy_split)
-bankruptcy_test <- rsample::training(bankruptcy_split)
+bankruptcy_test <- rsample::testing(bankruptcy_split)
+bankruptcy_cv <- rsample::vfold_cv(bankruptcy_train, v = 5, strata = bankrupt)
 
 # 2. Especificación del modelo
-bank_model <- parsnip::svm_linear(cost = tune()) %>% 
-  set_engine("LiblineaR") %>% 
+bank_model <- parsnip::svm_linear(cost = tune()) %>%
+  set_engine("kernlab") %>%
   set_mode("classification")
 
 # 3. Especificación de la receta
-bank_recipe <- recipes::recipe(bankrupt ~ ., data = bankruptcy_train) %>% 
+bank_recipe <- recipes::recipe(bankrupt ~ ., data = bankruptcy_train) %>%
   step_normalize(all_predictors())
+
+# 4. Modelo
+bank_wf <-
+  workflows::workflow() %>%
+  add_model(bank_model) %>%
+  add_recipe(bank_recipe)
 ```
 
 
+### Tuning
 
+```{r}
+cost()
+bank_wf %>% extract_parameter_dials("cost")
 
+# Cambio en los valores
+c_par <- cost(range = c(-12, 5)) %>% grid_regular(levels = 10)
+metrics <- yardstick::metric_set(accuracy)
 
+# Grilla
+bank_tune <-
+  bank_wf %>%
+  tune_grid(
+    bankruptcy_cv,
+    grid = c_par,
+    metrics = metrics
+  )
+
+autoplot(bank_tune)
+```
+
+Algo importante de lo anterior es que notamos que el **accuracy** se mantiene constante, en un valor bastante alto, al cambiar el hiperparámetro de costo. ¿Es esto un indicador de que el modelo está funcionando bien?
+
+```{r}
+# Vemos el parámetro del mejor modelo
+select_best(bank_tune, metric = "accuracy")
+
+# Obtenemos el fit final
+bank_f_wf <-
+  bank_wf %>%
+  finalize_workflow(select_best(bank_tune, metric = "accuracy"))
+bank_f_wf
+
+# Ajustamos y predecimos
+bank_fit <-
+  bank_f_wf %>%
+  fit(bankruptcy_train)
+
+bank_predictions <-
+  bank_fit %>%
+  predict(new_data = bankruptcy_test) %>%
+  dplyr::bind_cols(bankruptcy_test) %>%
+  dplyr::select(bankrupt, .pred_class)
+head(bank_predictions, 10)
+```
+
+Notamos algo raro...
+
+```{r}
+table(bank_predictions$.pred_class)
+```
+
+Obviamente conseguimos un accuracy muy alto, ya que el modelo predijo que ninguna compañía está en bancarrota, y como éstas son más...
+
+Así, mejor veamos la matriz de confusión.
+
+```{r}
+conf_mat(
+  data = bank_predictions,
+  truth = bankrupt,
+  estimate = .pred_class
+)
+```
+
+En este caso hay dos métricas que son más de interés: **precision** y **recall**. Jutamos todo lo anterior en el código a continuación, utilizando ahora estas métricas.
+
+```{r}
+set.seed(219)
+
+# 1. División de los datos
+bankruptcy_split <- rsample::initial_split(
+  data = bankruptcy,
+  strata = bankrupt
+)
+
+bankruptcy_train <- rsample::training(bankruptcy_split)
+bankruptcy_test <- rsample::testing(bankruptcy_split)
+bankruptcy_cv <- rsample::vfold_cv(bankruptcy_train, v = 5, strata = bankrupt)
+
+# 2. Especificación del modelo
+bank_model <-
+  parsnip::svm_linear(cost = tune()) %>%
+  set_engine("kernlab") %>%
+  set_mode("classification")
+
+# 3. Especificación de la receta
+bank_recipe <- 
+  recipes::recipe(bankrupt ~ ., data = bankruptcy_train) %>%
+  step_normalize(all_predictors())
+
+# 4. Modelo
+bank_wf <-
+  workflows::workflow() %>%
+  add_model(bank_model) %>%
+  add_recipe(bank_recipe)
+
+# Cambio en los valores
+c_par <- cost(range = c(-12, 5)) %>% grid_regular(levels = 5)
+metrics <- yardstick::metric_set(precision, recall)
+
+# Grilla
+bank_tune <-
+  bank_wf %>%
+  tune_grid(
+    bankruptcy_cv,
+    grid = c_par,
+    metrics = metrics
+  )
+
+autoplot(bank_tune)
+
+# Vemos el parámetro del mejor modelo
+select_best(bank_tune, metric = "recall")
+
+# Obtenemos el fit final
+bank_f_wf <-
+  bank_wf %>%
+  finalize_workflow(select_best(bank_tune, metric = "precision"))
+bank_f_wf
+
+# Ajustamos y predecimos
+bank_fit <-
+  bank_f_wf %>%
+  fit(bankruptcy_train)
+
+bank_predictions <-
+  bank_fit %>%
+  predict(new_data = bankruptcy_test) %>%
+  dplyr::bind_cols(bankruptcy_test) %>%
+  dplyr::select(bankrupt, .pred_class)
+head(bank_predictions, 10)
+
+conf_mat(
+  data = bank_predictions,
+  truth = bankrupt,
+  estimate = .pred_class
+)
+```
+
+# Próxima ayudantía: grillas irregulares, iterative search, kernel trick

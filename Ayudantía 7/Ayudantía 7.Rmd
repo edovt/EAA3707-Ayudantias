@@ -61,7 +61,7 @@ Antes de comenzar, cargamos las librerías que utilizaremos durante la ayudantí
 library(tidyverse)
 library(tidymodels)
 library(ggcorrplot)
-library(LiblineaR)
+library(patchwork)
 library(kernlab)
 
 
@@ -276,7 +276,7 @@ conf_mat(
 )
 ```
 
-En este caso hay dos métricas que son más de interés: **precision** y **recall**. Jutamos todo lo anterior en el código a continuación, utilizando ahora estas métricas.
+En este caso hay dos métricas que son más de interés: **precision** y **recall**. Juntamos todo lo anterior en el código a continuación, utilizando ahora estas métricas.
 
 ```{r}
 set.seed(219)
@@ -353,4 +353,243 @@ conf_mat(
 
 # SVM no lineal
 
+En la sección anterior asumimos que los datos son linealmente separables, o que al menos podíamos utilizar las variables slack tal que nos quedaran de esa manera. Dado los resultados obtenidos en la parte aplicada anterior, es posible que no existían maneras óptimas de incluir estas variables para así obtener una solución.
 
+¿Qué alternativas tenemos entonces?: lo que podemos hacer es encontrar un límite de decisión que no sea lineal.
+
+La forma en que hacemos lo anterior es transformando los datos de entrada en un espacio de mayor dimensión en el cual sí podamos encontrar un separador lineal. El problema de lo anterior es que el costo de resolver el problema de optimización en este nuevo espacio es demasiado alto.
+
+De todas maneras, es posible mostrar que el nuevo problema de optimización es equivalente al anterior, pero que ahora se cambian los productos punto $x_i^Tx_j$ por los productos punto en el nuevo espacio $\phi(x_i)^T\phi(x_j)$. ¿Qué nos dice esto?, esto nos dice que lo único que necesitamos realmente para resolver el problema es una función que dado dos valores $x_i$ y $x_j$ nos entregue el producto punto en el nuevo espacio, y esta función es la que se denomina **kernel**, denotada por
+
+$$
+K(x_i, x_j) = \phi(x_i)^T\phi(x_j) 
+$$
+
+En nuestro caso veremos dos kernels que están implementados en `parsnip`: el polinomial y el gaussiano (también conocido como RBF de Radial Basis Functions)
+
+## Modelamiento
+
+En nuestro caso utilizaremos el kernel gaussiano para mostrar las diferencias con el caso lineal. Definimos el modelo igual que antes, solo que ahora usamos `svm_rbf`. En este caso el único motor que acepta `parsnip` es `kernlab` y considera dos hiperparámetros: el costo $C$ y el parámetro del kernel $\sigma$.
+
+```{r}
+set.seed(219)
+
+# 1. División de los datos
+bankruptcy_split <- rsample::initial_split(
+  data = bankruptcy,
+  strata = bankrupt
+)
+
+bankruptcy_train <- rsample::training(bankruptcy_split)
+bankruptcy_test <- rsample::testing(bankruptcy_split)
+bankruptcy_cv <- rsample::vfold_cv(bankruptcy_train, v = 5, strata = bankrupt)
+
+# 2. Especificación del modelo
+bank_model <- parsnip::svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
+  set_engine("kernlab") %>%
+  set_mode("classification")
+
+# 3. Especificación de la receta
+bank_recipe <- recipes::recipe(bankrupt ~ ., data = bankruptcy_train) %>%
+  step_normalize(all_predictors())
+
+# 4. Modelo
+bank_wf <-
+  workflows::workflow() %>%
+  add_model(bank_model) %>%
+  add_recipe(bank_recipe)
+```
+
+### Tuning de los hiperparámetros
+
+En las ayudantías pasadas hemos realizado el tuning de los hiperparámetros de la misma manera: con grillas regulares. Es importante notar que esta no es la única forma, y que existen otras cada una con sus ventajas y desventajas.
+
+En particular, existen dos modos: búsqueda en grillas y búsqueda iterativa. En este caso nos enfocaremos en la búsqueda en grilla, la cual tiene subdivisiones en regulares e irregulares.
+
+Veamos por ejemplo en nuestro caso las diferencias:
+
+```{r}
+params_svm <- parameters(cost(), rbf_sigma())
+
+# Grilla regular
+regular <- grid_regular(params_svm, levels = c(5, 5))
+
+ggplot(regular, aes(x = cost, y = rbf_sigma)) +
+  geom_point()
+
+## Recordar que las escalas son transformadas
+cost()
+rbf_sigma()
+
+ggplot(regular, aes(x = cost, y = rbf_sigma)) +
+  geom_point() +
+  scale_y_log10() +
+  scale_x_continuous(trans = "log2") +
+  labs(title = "Grilla regular")
+```
+
+```{r}
+# Grilla aleatoria
+random <- grid_random(params_svm, size = 25)
+
+ggplot(random, aes(x = cost, y = rbf_sigma)) +
+  geom_point() +
+  scale_y_log10() +
+  scale_x_continuous(trans = "log2") +
+  labs(title = "Grilla irregular - aleatoria")
+```
+
+```{r}
+# Grilla "Space-filling designs"
+me <- grid_max_entropy(params_svm, size = 25)
+lh <- grid_latin_hypercube(params_svm, size = 25)
+
+p1 <- ggplot(me, aes(x = cost, y = rbf_sigma)) +
+  geom_point() +
+  scale_y_log10() +
+  scale_x_continuous(trans = "log2") +
+  labs(title = "Grilla irregular - Maximum Entropy")
+
+p2 <- ggplot(lh, aes(x = cost, y = rbf_sigma)) +
+  geom_point() +
+  scale_y_log10() +
+  scale_x_continuous(trans = "log2") +
+  labs(title = "Grilla irregular - Latin Hypercube")
+
+p1 + p2
+```
+
+Sin un motivo específico, utilizaremos la grilla de máxima entropía.
+
+```{r}
+metrics <- yardstick::metric_set(accuracy)
+
+bank_tune <-
+  bank_wf %>%
+  tune_grid(
+    bankruptcy_cv,
+    grid = me,
+    metrics = metrics
+  )
+
+autoplot(bank_tune)
+```
+
+Algo importante de lo anterior es que notamos que el **accuracy** se mantiene constante, en un valor bastante alto, al cambiar **ambos** hiperparámetros. Repetimos el análisis anterior.
+
+```{r}
+# Vemos el parámetro del mejor modelo
+select_best(bank_tune, metric = "accuracy")
+
+# Obtenemos el fit final
+bank_f_wf <-
+  bank_wf %>%
+  finalize_workflow(select_best(bank_tune, metric = "accuracy"))
+bank_f_wf
+
+# Ajustamos y predecimos
+bank_fit <-
+  bank_f_wf %>%
+  fit(bankruptcy_train)
+
+bank_predictions <-
+  bank_fit %>%
+  predict(new_data = bankruptcy_test) %>%
+  dplyr::bind_cols(bankruptcy_test) %>%
+  dplyr::select(bankrupt, .pred_class)
+head(bank_predictions, 10)
+```
+
+¿Ocurrirá lo mismo que la vez pasada?
+
+```{r}
+table(bank_predictions$.pred_class)
+```
+
+```{r}
+conf_mat(
+  data = bank_predictions,
+  truth = bankrupt,
+  estimate = .pred_class
+)
+```
+
+En este caso hay dos métricas que son más de interés: **precision** y **recall**. Juntamos todo lo anterior en el código a continuación, utilizando ahora estas métricas.
+
+```{r}
+set.seed(219)
+
+# 1. División de los datos
+bankruptcy_split <- rsample::initial_split(
+  data = bankruptcy,
+  strata = bankrupt
+)
+
+bankruptcy_train <- rsample::training(bankruptcy_split)
+bankruptcy_test <- rsample::testing(bankruptcy_split)
+bankruptcy_cv <- rsample::vfold_cv(bankruptcy_train, v = 5, strata = bankrupt)
+
+# 2. Especificación del modelo
+bank_model <-
+  parsnip::svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
+  set_engine("kernlab") %>%
+  set_mode("classification")
+
+# 3. Especificación de la receta
+bank_recipe <- 
+  recipes::recipe(bankrupt ~ ., data = bankruptcy_train) %>%
+  step_normalize(all_predictors())
+
+# 4. Modelo
+bank_wf <-
+  workflows::workflow() %>%
+  add_model(bank_model) %>%
+  add_recipe(bank_recipe)
+
+# Cambio en los valores
+params_svm <- parameters(cost(), rbf_sigma())
+me <- grid_max_entropy(params_svm, size = 25)
+metrics <- yardstick::metric_set(precision, recall)
+
+# Grilla
+bank_tune <-
+  bank_wf %>%
+  tune_grid(
+    bankruptcy_cv,
+    grid = me,
+    metrics = metrics
+  )
+
+autoplot(bank_tune)
+
+# Vemos el parámetro del mejor modelo
+select_best(bank_tune, metric = "recall")
+
+# Obtenemos el fit final
+bank_f_wf <-
+  bank_wf %>%
+  finalize_workflow(select_best(bank_tune, metric = "recall"))
+bank_f_wf
+
+# Ajustamos y predecimos
+bank_fit <-
+  bank_f_wf %>%
+  fit(bankruptcy_train)
+
+bank_predictions <-
+  bank_fit %>%
+  predict(new_data = bankruptcy_test) %>%
+  dplyr::bind_cols(bankruptcy_test) %>%
+  dplyr::select(bankrupt, .pred_class)
+head(bank_predictions, 10)
+
+conf_mat(
+  data = bank_predictions,
+  truth = bankrupt,
+  estimate = .pred_class
+)
+```
+
+**Repitan lo mismo con `rbf_poly`**
+
+# Discusión: problemas multiclase

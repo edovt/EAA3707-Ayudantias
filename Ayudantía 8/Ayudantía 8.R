@@ -103,7 +103,6 @@ mp_start <- mp_wf %>%
   ) ; beepr::beep(1)
 
 autoplot(mp_start)
-collect_metrics(mp_start)
 show_best(mp_start)
 
 ctrl <- tune::control_bayes(verbose = TRUE)
@@ -149,5 +148,99 @@ conf_mat_tree <- conf_mat(
 autoplot(conf_mat_tree, "mosaic")
 autoplot(conf_mat_tree, "heatmap")
 
+# Bosque aleatorio ------------------------------------------------------------------
+# 2. Especificación del modelo
 
+mp_model_b <- parsnip::rand_forest(mtry = tune(),
+                                   trees = tune(),
+                                   min_n = tune()) %>% 
+  set_engine("ranger") %>% 
+  set_mode("classification")
 
+# 3. Especificación de la receta
+mp_recipe_b <- recipes::recipe(price_range ~ ., data = mp_train)
+
+# 4. Modelo
+mp_wf_b <- 
+  workflows::workflow() %>% 
+  add_model(mp_model_b) %>% 
+  add_recipe(mp_recipe_b)
+
+# Tuning ----------------------------------------------------------------------------
+## Proponer valores iniciales
+mtry()
+trees()
+min_n()
+
+# Grilla de partida
+start_grid <- 
+  parameters(
+    finalize(mtry(), x = select(mp_train, -price_range)),
+    trees(),
+    min_n()
+  ) %>% 
+  grid_regular()
+start_grid
+
+metrics <- yardstick::metric_set(accuracy)
+mp_start_b <- mp_wf_b %>% 
+  tune_grid(
+    resamples = mp_cv,
+    grid = start_grid,
+    metrics = metrics
+  ) ; beepr::beep(1)
+
+autoplot(mp_start_b)
+show_best(mp_start_b)
+
+ctrl <- tune::control_bayes(verbose = TRUE)
+mp_bayesopt_b <- 
+  mp_wf_b %>% 
+  tune_bayes(
+    resamples = mp_cv,
+    metrics = metrics,
+    initial = mp_start_b,
+    iter = 20,
+    control = ctrl
+  ) ; beepr::beep(1)
+
+autoplot(mp_bayesopt_b, type = "performance")
+autoplot(mp_bayesopt_b, type = "parameters")
+
+select_best(mp_bayesopt_b)
+
+# Obtenemos el fit final
+mp_final_wf_b <- 
+  mp_wf_b %>% 
+  finalize_workflow(select_best(mp_bayesopt_b))
+mp_final_wf_b
+
+# Ajustamos y predecimos
+mp_fit_b <- 
+  mp_final_wf_b %>% 
+  fit(mp_train)
+
+mp_predictions_b <- 
+  mp_fit_b %>% 
+  predict(new_data = mp_test) %>% 
+  dplyr::bind_cols(mp_test) %>% 
+  dplyr::select(price_range, .pred_class)
+head(mp_predictions)
+
+conf_mat_tree_b <- conf_mat(
+  data = mp_predictions_b,
+  truth = price_range,
+  estimate = .pred_class
+)
+
+autoplot(conf_mat_tree_b, "mosaic")
+autoplot(conf_mat_tree_b, "heatmap")
+
+# Vemos el valor del accuracy
+acc_rf <- accuracy(
+  data = mp_predictions_b,
+  truth = price_range,
+  estimate = .pred_class
+)
+acc_rf
+acc_tree

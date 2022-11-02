@@ -1,8 +1,11 @@
+library(here)
+library(beepr)
 library(tidyverse)
 library(tidymodels)
-library(corrplot)
 library(skimr)
-library(here)
+library(corrplot)
+library(rpart)
+
 
 # Para obtener resultados reproducibles
 set.seed(219)
@@ -63,15 +66,14 @@ mp_cv <- rsample::mc_cv(mp_train, strata = price_range)
 # 2. Especificación del modelo
 mp_model <- parsnip::decision_tree(cost_complexity = tune(),
                                    tree_depth = tune(),
-                                   min_n = 10) %>% 
+                                   min_n = tune()) %>% 
   set_engine("rpart") %>% 
   set_mode("classification")
 
 # 3. Especificación de la receta
+## NOTA: Ver https://www.tmwr.org/pre-proc-table.html
 mp_recipe <- recipes::recipe(price_range ~ ., data = mp_train)
 
-## Ver https://www.tmwr.org/pre-proc-table.html
-  
 # 4. Modelo
 mp_wf <- 
   workflows::workflow() %>% 
@@ -79,53 +81,73 @@ mp_wf <-
   add_recipe(mp_recipe)
 
 # Tuning ----------------------------------------------------------------------------
+## Proponer valores iniciales
 cost_complexity()
+tree_depth()
+min_n()
 
-bank_wf %>% extract_parameter_dials("cost")
-mp_wf %>% extract_parameter_dials("cost_complexity")
-
-# Cambio en los valores
-c_par <- cost(range = c(-12, 5)) %>% grid_regular(levels = 10)
+## NOTA: Mencionar por qué acá el accuracy no trae tantos problemas
 metrics <- yardstick::metric_set(accuracy)
 
-# Grilla
-bank_tune <-
-  bank_wf %>%
+# Grilla de partida
+start_grid <- 
+  extract_parameter_set_dials(mp_wf) %>% 
+  grid_regular()
+start_grid
+
+mp_start <- mp_wf %>% 
   tune_grid(
-    bankruptcy_cv,
-    grid = c_par,
+    resamples = mp_cv,
+    grid = start_grid,
     metrics = metrics
-  )
+  ) ; beepr::beep(1)
 
-autoplot(bank_tune)
+autoplot(mp_start)
+collect_metrics(mp_start)
+show_best(mp_start)
 
-# Vemos el parámetro del mejor modelo
-select_best(bank_tune, metric = "accuracy")
+ctrl <- tune::control_bayes(verbose = TRUE)
+mp_bayesopt <- 
+  mp_wf %>% 
+  tune_bayes(
+    resamples = mp_cv,
+    metrics = metrics,
+    initial = mp_start,
+    iter = 20,
+    control = ctrl
+  ) ; beepr::beep(1)
+
+autoplot(mp_bayesopt, type = "performance")
+autoplot(mp_bayesopt, type = "parameters")
+
+select_best(mp_bayesopt)
 
 # Obtenemos el fit final
-bank_f_wf <-
-  bank_wf %>%
-  finalize_workflow(select_best(bank_tune, metric = "accuracy"))
-bank_f_wf
+mp_final_wf <- 
+  mp_wf %>% 
+  finalize_workflow(select_best(mp_bayesopt))
+mp_final_wf
 
 # Ajustamos y predecimos
-bank_fit <-
-  bank_f_wf %>%
-  fit(bankruptcy_train)
+mp_fit <- 
+  mp_final_wf %>% 
+  fit(mp_train)
 
-bank_predictions <-
-  bank_fit %>%
-  predict(new_data = bankruptcy_test) %>%
-  dplyr::bind_cols(bankruptcy_test) %>%
-  dplyr::select(bankrupt, .pred_class)
-head(bank_predictions, 10)
+mp_predictions <- 
+  mp_fit %>% 
+  predict(new_data = mp_test) %>% 
+  dplyr::bind_cols(mp_test) %>% 
+  dplyr::select(price_range, .pred_class)
+head(mp_predictions)
 
-table(bank_predictions$.pred_class)
-
-conf_mat(
-  data = bank_predictions,
-  truth = bankrupt,
+conf_mat_tree <- conf_mat(
+  data = mp_predictions,
+  truth = price_range,
   estimate = .pred_class
 )
+
+autoplot(conf_mat_tree, "mosaic")
+autoplot(conf_mat_tree, "heatmap")
+
 
 

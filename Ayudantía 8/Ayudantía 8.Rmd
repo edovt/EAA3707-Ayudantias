@@ -60,18 +60,27 @@ Bienvenid\@s a la octava ayudantía de EAA3707 - Machine Learning para Negocios.
 Antes de comenzar, cargamos las librerías que utilizaremos durante la ayudantía.
 
 ```{r librerias, message=FALSE, warning=FALSE}
+library(here)
+library(beepr)
 library(tidyverse)
 library(tidymodels)
-library(corrplot)
+library(patchwork)
 library(skimr)
+library(corrplot)
 library(rpart)
+library(ranger)
 
 
 # Para obtener resultados reproducibles
 set.seed(219)
 ```
 
-**CAMBIAR**: Las librerías `LiblineaR` y `kernlab` son las que contienen los modelos que acepta `svm_poly` y `svm_rbf` de parsnip como motor.
+Ocupamos las siguientes librerías nuevas:
+
+*   `beepr`: permite emitir sonidos al terminar de ejecutar un comando. Útil cuando estamos ajustando modelos pesados.
+*   `skimr`: permite echar fácilmente un vistazo inicial a los datos.
+*   `rpart`: uno de los motores aceptados por `parsnip` para ajustar árboles de decisión.
+*   `ranger`: uno de los motores aceptados por `parsnip` para ajustar bosques aleatorios.
 
 Les recuerdo los libros que les recomiendo para aprender de R:
 
@@ -220,10 +229,176 @@ mobile_prices <- mobile_prices_unclean %>%
                                       labels=c("Yes", "No")),
                 wifi = factor(wifi, levels=c(1, 0), labels=c("Yes", "No")),
                 price_range = factor(price_range, levels=c(0, 1, 2, 3),
-                                     labels=c("Low", "Medium", "High", "Very High")))
+                                     labels=c("Low", "Medium", "High", "Very High"),
+                                     ordered = TRUE))
 
 skimr::skim(mobile_prices)
 ```
 
 Así, tenemos 14 variables numéricas y 7 categóricas, incluyendo la variable respuesta.
+
+Como análisis exploratorio, podemos ver en primer lugar la correlación entre las variables númericas presentes en la base de datos.
+
+```{r correlacion, echo=FALSE}
+mobile_prices %>% 
+  select_if(is.numeric) %>% 
+  cor() %>% 
+  corrplot::corrplot()
+```
+
+Notamos que existe una baja correlación excepto entre variables que intuitivamente sí deberían estar correlacionadas entre sí.
+
+Por otro lado, podemos elegir dos variables al azar y realizar boxplots para ver si existen relaciones entre alguna de ellas con el rango de precios. Para este ejemplo, tomé la velocidad del procesador y la memoria RAM.
+
+```{r boxplots, echo=FALSE}
+p1 <- ggplot(mobile_prices,
+             mapping = aes(x = price_range, y = clock_speed, fill = price_range)) +
+  geom_boxplot() +
+  labs(title = "Relación entre velocidad del procesador y rango de precio",
+       x = "Rango de precio", y = "Velocidad del procesador")
+
+p2 <- ggplot(mobile_prices,
+             mapping = aes(x = price_range, y = ram, fill = price_range)) +
+  geom_boxplot() +
+  labs(title = "Relación entre memoria RAM y rango de precio",
+       x = "Rango de precio", y = "Memoria RAM")
+
+p1 + p2
+```
+
+Notamos que pareciera no existir una relación con la primera variable, pero sí una clara relación positiva entre la memoria RAM con el precio.
+
+## Modelamiento: Árboles de Decisión
+
+Realizamos los pasos iniciales típicos. En este caso, debemos usar `decision_tree` al momento de definir el modelo, el cual acepta tres hiperparámetros: costo de complejidad, máxima profundidad y mínimo n. Para hacer el tuning de los parámetros usaremos búsqueda iterativa para los tres parámetros.
+
+Otra cosa importante es el preprocesamiento, para lo cual seguimos las recomendaciones de [acá](https://www.tmwr.org/pre-proc-table.html), lo cual nos dice que no debemos hacer nada a priori.
+
+```{r modelo arbol}
+# 1. División de los datos
+mobile_prices_split <- rsample::initial_split(
+  data = mobile_prices,
+  strata = price_range
+)
+
+mp_train <- rsample::training(mobile_prices_split)
+mp_test <- rsample::testing(mobile_prices_split)
+mp_cv <- rsample::mc_cv(mp_train, strata = price_range)
+
+# 2. Especificación del modelo
+mp_model <- parsnip::decision_tree(cost_complexity = tune(),
+                                   tree_depth = tune(),
+                                   min_n = tune()) %>% 
+  set_engine("rpart") %>% 
+  set_mode("classification")
+
+# 3. Especificación de la receta
+mp_recipe <- recipes::recipe(price_range ~ ., data = mp_train)
+
+# 4. Modelo
+mp_wf <- 
+  workflows::workflow() %>% 
+  add_model(mp_model) %>% 
+  add_recipe(mp_recipe)
+```
+
+### Tuning hiperparámetros
+
+En primer lugar, veamos los valores por default que se consideran al realizar el tuning.
+
+```{r valores default hiperparámetros}
+cost_complexity()
+tree_depth()
+min_n()
+```
+
+Ahora, para hacer búsqueda iterativa primero debemos proponer valores iniciales. Normalmente lo que hacemos es ajustar el modelo con una grilla regular pequeña, para después tomar el mejor modelo como punto de partida.
+
+**Nota**: usaremos accuracy como métrica para elegir el mejor modelo. ¿Por qué en este caso esto no es tan problemático?
+
+```{r grilla partida arbol}
+# Grilla de partida
+start_grid <- 
+  extract_parameter_set_dials(mp_wf) %>% 
+  grid_regular()
+start_grid
+
+metrics <- yardstick::metric_set(accuracy)
+mp_start <- mp_wf %>% 
+  tune_grid(
+    resamples = mp_cv,
+    grid = start_grid,
+    metrics = metrics
+  ) ; beepr::beep(1)
+
+autoplot(mp_start)
+show_best(mp_start)
+```
+
+Ahora que ya tenemos posibles valores iniciales (`tune` utilizará el mejor), pasamos a la búsqueda iterativa, en particular usando optimización bayesiana.
+
+```{r busqueda iterativa arbol}
+ctrl <- tune::control_bayes(verbose = TRUE)
+mp_bayesopt <- 
+  mp_wf %>% 
+  tune_bayes(
+    resamples = mp_cv,
+    metrics = metrics,
+    initial = mp_start,
+    iter = 20,
+    control = ctrl
+  ) ; beepr::beep(1)
+
+# Vemos la evolución a través de las iteraciones
+autoplot(mp_bayesopt, type = "performance")
+autoplot(mp_bayesopt, type = "parameters")
+
+# Vemos los mejores valores
+select_best(mp_bayesopt)
+```
+
+Ya teniendo los hiperparámetros óptimos, obtenemos el fit final y realizamos las predicciones en la base de test.
+
+```{r metricas arbol}
+# Obtenemos el fit final
+mp_final_wf <- 
+  mp_wf %>% 
+  finalize_workflow(select_best(mp_bayesopt))
+mp_final_wf
+
+# Ajustamos y predecimos
+mp_fit <- 
+  mp_final_wf %>% 
+  fit(mp_train)
+
+mp_predictions <- 
+  mp_fit %>% 
+  predict(new_data = mp_test) %>% 
+  dplyr::bind_cols(mp_test) %>% 
+  dplyr::select(price_range, .pred_class)
+head(mp_predictions)
+
+# Vemos la matriz de confusión
+conf_mat_tree <- conf_mat(
+  data = mp_predictions,
+  truth = price_range,
+  estimate = .pred_class
+)
+
+autoplot(conf_mat_tree, "heatmap")
+autoplot(conf_mat_tree, "mosaic")
+
+# Vemos el valor del accuracy
+acc_tree <- accuracy(
+  data = mp_predictions,
+  truth = price_range,
+  estimate = .pred_class
+)
+acc_tree
+```
+
+## Modelamiento: Bosque aleatorio
+
+Por último, ajustamos también un bosque aleatorio para ver si este modelo logra mejorar el poder de predicción. En `parsnip`, el modelo se define a través de `rand_forest`, el cual por defecto utiliza la librería `ranger`.
+
 

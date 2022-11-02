@@ -53,17 +53,17 @@ here::i_am("Ayudantía 8/Ayudantía 8.Rmd")
 Bienvenid\@s a la octava ayudantía de EAA3707 - Machine Learning para Negocios. En la ayudantía veremos:
 
 1.  Árboles de Decisión
-2.  Árboles de Regresión
-3.  Random Forests
-4.  Búsqueda iterativa de hiperparámetros
+2.  Random Forests
+3.  Búsqueda iterativa de hiperparámetros
+4.  Discusión: Árboles de Regresión
 
 Antes de comenzar, cargamos las librerías que utilizaremos durante la ayudantía.
 
 ```{r librerias, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(tidymodels)
-library(ggcorrplot)
-library(patchwork)
+library(corrplot)
+library(skimr)
 library(rpart)
 
 
@@ -71,7 +71,7 @@ library(rpart)
 set.seed(219)
 ```
 
-Las librerías `LiblineaR` y `kernlab` son las que contienen los modelos que acepta `svm_poly` y `svm_rbf` de parsnip como motor.
+**CAMBIAR**: Las librerías `LiblineaR` y `kernlab` son las que contienen los modelos que acepta `svm_poly` y `svm_rbf` de parsnip como motor.
 
 Les recuerdo los libros que les recomiendo para aprender de R:
 
@@ -87,511 +87,143 @@ Les recuerdo los libros que les recomiendo para aprender de R:
 
 -   **Tidy Modeling with R**: disponible [acá](https://www.tmwr.org/). Recomendado para aprender del ecosistema tidymodels. Tiene también un capítulo pequeño de tidyverse con lo justo y necesario.
 
-# Support Vector Machines
+# Árboles de Decisión
 
-<center>![SVM](http://res.cloudinary.com/dyd911kmh/image/upload/f_auto,q_auto:best/v1526288453/index3_souoaz.png){height="500px" width="750px"}</center>
+<center>![Árbol de Decisión y sus elementos. Créditos Yulia Kosarenko - Why Change Consulting](https://i0.wp.com/why-change.com/wp-content/uploads/2021/11/Decision-Tree-elements-2.png?resize=715%2C450&ssl=1){height="500px" width="750px"}</center>
 
-Las Máquinas de Vector Soporte (SVM) son un modelo de aprendizaje supervisado el cual, a partir de hiperplanos, separa de forma óptima los puntos de una clase y otra. El concepto fundamental es el de "separación óptima", donde se busca el hiperplano que tenga la máxima distancia (margen) con los puntos que estén más cerca de él mismo.
+Los Árboles de Decisión corresponden a un modelo de clasificación, esto es, se dispone de un conjunto de datos previamente rotulados con la clase a la que pertenece cada observación. Una de las ventajas de este modelo es que es bastante simple y a la vez fácil de interpretar.
 
-**Nota**: SVM también puede ser utilizado para regresión.
+En particular, lo que hace es segmentar el espacio de predictores, de manera recursiva, y realizar una misma predicción para cada región final, correspondiente a la clase de mayor frecuencia.
 
-Es importante recordar que un hiperplano p-dimensional está dado por
+**Nota**: Los modelos de árboles también pueden ser utilizados para regresión. Lo veremos más adelante.
+
+Dentro de los árboles, tanto de decisión como de regresión, es importante la siguiente terminología:
+
+*   **Raíz**: Regla de decisión inicial del modelo
+*   **Ramas**: Caminos que sigue el árbol
+*   **Nodo interno**: Puntos intermedios en los cuales el árbol se divide de acuerdo a alguna regla de decisión
+*   **Nodo terminal u hoja**: Fin de una rama en la cual el árbol deja de dividirse. En este punto se realiza la clasificación.
+
+## Criterios de división
+
+¿Cómo segmentamos el espacio de predictores?. Una de las opciones más intuitivas es la de utilizar la tasa de clasificación incorrecta, pero se ha visto que empíricamente esta alternativa no funciona muy bien.
+
+Así, entre las propuestas se encuentran dos que son bastante utilizadas: el Índice Gini y la Entropía.
+
+### Índice Gini
+
+Dado un conjunto de observaciones $D$ con $p_i$ la proporción de ellas que pertenecen a la i-ésima clase, se define el **Índice de Gini** como
+
 $$
-h_w(x) = w^tx + b = 0
+\begin{equation*}
+  \text{Gini}(D) = 1 - \sum_{i=1}^m p_i^2
+\end{equation*}
 $$
 
-donde $w, x \in \mathbb{R}^p$. Estos hiperplanos dividen el espacio en dos, uno con $h_w(x) > 0$ y otro con $h_w(x) < 0$, lo cual al unir con los $x$ tal que $h_w(x) = 0$ nos entrega el espacio original.
+### Entropía
 
-¿Qué es lo que buscamos entonces al ajustar el modelo? lo que buscamos es justamente encontrar este hiperplano $h_w(x)$ que separe de manera "óptima". Por ejemplo, en el caso binario de clasificación, nos interesaría encontrar el hiperplano tal que $h_w(x_i) \geq 0$ para una categoría y $h_w(x_i) < 0$ para otra categoría. Es importante notar que lo anterior no siempre es posible de manera perfecta, y en el caso que sí lo sea diremos que el problema es **perfectamente separable**.
-
-**Nota**: cuando hablamos de "encontrar" el hiperplano lo que buscamos entonces es $w$ y $b$.
-
-En el caso anterior, si denotamos las categorías por $\pm 1$ entonces queremos encontrar el hiperplano tal que $y_ih_w(x_i) \geq 0$ para todo $i = 1, ...,n$. Ahora, pueden existir muchos hiperplanos que cumplan lo anterior, así que elegimos el "mejor" como el que maximice el margen con respecto a los puntos de las clases, lo cual se representa a través del problema de optimización dado por
+La idea de esta medida es que, si una clase es muy poco común, el saber que una observación dada pertenece a dicha clase entrega mucha información y, de manera equivalente, si una clase es común entonces la pertenencia entrega poca información. En particular, se tiene
 
 $$
-\min_{w, b} \frac{||w||^2}{2}, \quad \text{sujeto a} \;\; y_i(w^tx + b) \geq 1
+\begin{equation*}
+  \text{Entropía}(D) = -\sum_{i=1}^m p_i \log_2 p_i
+\end{equation*}
+$$
+Luego, debemos elegir el atributo que tenga una mayor reducción esperada en entropía, esto es,
+
+$$
+\text{Gain}(S, A) = \text{Entropía}(S) - \sum_{v \in A}\frac{|S_v|}{|S|}\text{Entropía}(S_r)
 $$
 
-Ahora, ¿qué pasa si los datos no son linealmente separables?. Para acomodar el modelo anterior a este caso se introducen las variables **slack** $\xi_i$ obteniendo el nuevo problema de optimización dado por
+donde $S$ es el set original, $A$ es algún atributo y $S_r$ es la entropía del sub-grupo $r$ de $A$.
 
-$$
-\min_{w, b, \xi}\frac{||w||^2}{2} + C\sum_{i=1}^n \xi_i
-$$
+## Overfitting
 
-sujeto a $y_i(w^Tx_i + b) \geq 1 - \xi_i$, $\xi_i \geq 0$.
+Uno de los problemas de los árboles de decisión es que fácilmente podemos caer en el problema de overfitting si no nos cuidamos de ajustar un modelo con muchas ramificaciones. Para cuidarnos de lo anterior, existen varias opciones:
+
+* **Poda de un árbol**: Para esto, se introduce un parámetro de complejidad, comúnmente denotado por $\alpha$ o $Cp$. Este parámetro controla el tamaño total del árbol, penalizando por el número total de nodos finales.
+* **Tree Depth**: Controla la máxima profundidad del árbol.
+* **Mínimo n**: Mínimo número de puntos en un nodo requeridos para que el nodo se vuelva a dividir.
 
 
-# Aplicación - Predicción de quiebra
+# Random Forests
 
-<center>![](https://cdn.laruta.io/app/uploads/sites/7/2022/02/22171717/Bankruptcy-1.jpeg){height="500px" width="750px"}</center>
+La idea de los Bosques Aleatorios es bastante simple, y es que se unen muchos árboles de decisión. Para esto, se entrenan $L$ árboles de decisión, usando en cada caso $N$ datos de entrenamiento, normalmente muestreados con reemplazo. Finalmente, la clasificación está dada por la predicción más común entre los $L$ árboles resultantes (majority vote)
 
-Para aplicar de manera práctica el modelo SVM, utilizaremos la base de datos `bankruptcy.csv`, obtenida del [repositorio](https://archive-beta.ics.uci.edu/ml/datasets/taiwanese+bankruptcy+prediction#Abstract) de datos de UC Irvine.
+Además, en cada división estos árboles consideran solo un conjunto $m < M$ de atributos disponibles, elegidos de manera aleatoria.
 
-Esta base de datos contiene información de compañías taiwanesas entre los años 1999 y 2009 como el ROA, ventas netas, tasas, valor neto, etc., así como la definición como compañía en bancarrota o no según las regulaciones de la Bolsa de Valores de Taiwán. Nos gustaría entonces predecir si una empresa, dada sus actuales características, está en riesgo o no.
+# Búsqueda Iterativa
+
+En las ayudantías anteriores hemos visto dos maneras de búsqueda de hiperparámetros, ambas de la categoría de grillas: grillas regulares y grillas aleatorias.
+
+En esta ayudantía presentaremos una forma diferente de buscar estos valores y es a través de búsqueda iterativa. Estos algoritmos consideran diferentes puntos de partida y va considerando valores cercanos que vayan optimizando la métrica deseada. Así, la diferencia con las grillas regulares es que no fija los valores a buscar al principio del algoritmo, si no que los va considerando en cada iteración.
+
+Podemos ver la diferencia de los tres algoritmos a continuación.
+
+<center>![Búsqueda en grillas regulares. Créditos https://en.wikipedia.org/wiki/Hyperparameter_optimization](https://r4ds.github.io/bookclub-tmwr/images/grid_search-hyperparameter.png){height="500px" width="750px"}</center>
+
+<center>![Búsqueda en grillas aleatorias. Créditos https://en.wikipedia.org/wiki/Hyperparameter_optimization](https://r4ds.github.io/bookclub-tmwr/images/random_search-hyperparameter.png){height="500px" width="750px"}</center>
+
+<center>![Búsqueda iterativa. Créditos https://en.wikipedia.org/wiki/Hyperparameter_optimization](https://r4ds.github.io/bookclub-tmwr/images/bayesian_optimization-hyperparameter.png){height="500px" width="750px"}</center>
+
+Es importante notar que uno de los problemas de este algoritmo es que no podemos asegurar la convergencia a un mínimo/máximo global, sino que solo a locales. De todas maneras, una de las formas de aliviar este problema es considerar diferentes puntos de partida en el espacio de búsqueda.
+
+En particular, tidymodels nos deja realizar optimización bayesiana a través de la función `tune_bayes`.
+
+# Ejemplo: Clasificación de precios de teléfonos
+
+<center>![Créditos: The Verge](https://cdn0.vox-cdn.com/thumbor/QH2zaur_qnCJUmxY6FBpsgU-hoo=/0x1080/volume-assets.voxmedia.com/production/97b73cbb0cf93288fd8a8b28034fbb4b/bigpic_money.jpg){height="500px" width="900px"}</center>
+
+Harto del número reducido de empresas de teléfonos celulares, usted decide iniciar su propia compañía que logre competir con las diferentes empresas globales importantes.
+
+Uno de los problemas es poder estimar el precio de los celulares que producirá, para lo cual decide recolectar datos de diferentes celulares y el rango de precios al que pertenecen. Utilizando estos datos, desea entrenar un modelo de clasificación que le permita definir un rango de precios para sus futuros productos.
+
+Estos datos se encuentran en la base de datos `mobile_price.csv`. Entre las variables se encuentran:
+
+* **battery_power**: energía total que puede almacenar, en mAh
+* **blue**: tiene bluetooth o no
+* **clock_speed**: velocidad del microproceasador
+* **dual_sim**: tiene soporte para dual sim o no
+* **fc**: megapixeles de la cámara frontal (0 si no tiene cámara frontal)
+* **four_g**: si tiene o no 4G
+* **int_memory**: memoria interna en GB
+* **pc**: megapixeles de la cámara principal
+* **px_height**: resolución a lo alto
+* **px_widht**: resolución a lo ancho
+* **ram**: memoria RAM del dispositivo en megabytes
+* **sc_h**: alto de la pantalla en centímetros
+* **sc_w**: ancho de la pantalla en centímetros
+* **price_range**: variable respuesta. Toma los valores 0 (bajo costo), 1 (costo medio), 2 (costo alto) y 3 (costo muy alto)
 
 ## Análisis exploratorio
 
-En primer lugar, cargamos nuestros datos.
+Importemos en primer lugar nuestros datos y demos un primer vistazo inicial.
 
-```{r}
-bankruptcy <- read_csv(here("Ayudantía 6", "bankruptcy.csv"), show_col_types = FALSE)
-head(bankruptcy, 8)
+```{r carga datos}
+# Cargamos los datos
+mobile_prices_unclean <- readr::read_csv(here("Ayudantía 8", "mobile_price.csv"),
+                                         show_col_types = FALSE)
+
+# Damos un vistazo
+skimr::skim(mobile_prices_unclean)
 ```
 
-Lo primero que podemos notar es que la variable `Bankrupt?` categórica está como numérica, por lo que la pasamos a factor (de pasada también le cambiamos el nombre)
+Notamos en particular que algunas variables que deberían ser factor aparecen como numéricas, así que debemos cambiarlas.
 
-```{r}
-bankruptcy <- bankruptcy %>% 
-  dplyr::rename(bankrupt = `Bankrupt?`) %>% 
-  dplyr::mutate(bankrupt = factor(bankrupt, levels = c("1", "0"),
-                                  labels = c("Yes", "No")))
-glimpse(bankruptcy)
+```{r cambio a factor}
+mobile_prices <- mobile_prices_unclean %>% 
+  dplyr::mutate(blue = factor(blue, levels=c(1, 0), labels=c("Yes", "No")),
+                dual_sim = factor(dual_sim, levels=c(1, 0), labels=c("Yes", "No")),
+                four_g = factor(four_g, levels=c(1, 0), labels=c("Yes", "No")),
+                three_g = factor(three_g, levels=c(1, 0), labels=c("Yes", "No")),
+                touch_screen = factor(touch_screen, levels=c(1, 0),
+                                      labels=c("Yes", "No")),
+                wifi = factor(wifi, levels=c(1, 0), labels=c("Yes", "No")),
+                price_range = factor(price_range, levels=c(0, 1, 2, 3),
+                                     labels=c("Low", "Medium", "High", "Very High")))
+
+skimr::skim(mobile_prices)
 ```
 
-Otra cosa importante es notar la gran diferencia de observaciones entre ambas clases, lo cual podemos ver a continuación:
+Así, tenemos 14 variables numéricas y 7 categóricas, incluyendo la variable respuesta.
 
-```{r}
-table(bankruptcy$bankrupt)
-```
-
-Por último, y **solo** para facilitar un poco la ayudantía, elegiré al azar algunas de las columnas de la base de datos para utilizar.
-
-```{r}
-bankruptcy <- bankruptcy[, c(1, 2, 5, 9, 14, 24, 29, 33, 48, 51, 56, 66, 72)]
-```
-
-Ya con esto podemos ver, por ejemplo, un gráfico de correlación entre las variables predictoras, o la distribución de éstas separando por la clase.
-
-```{r, echo=FALSE}
-dplyr::select(bankruptcy, -bankrupt) %>%
-  as.data.frame() %>%
-  cor() %>%
-  ggcorrplot::ggcorrplot()
-```
-
-```{r, echo=FALSE, warning=FALSE}
-bankruptcy %>%
-  tidyr::pivot_longer(!bankrupt, names_to = "features", values_to = "values") %>%
-  ggplot(aes(x = bankrupt, y = log(values), fill = features)) +
-  geom_boxplot() +
-  facet_wrap(~features, scales = "free", ncol = 4) +
-  scale_color_viridis_d(option = "plasma", end = .7) +
-  theme(legend.position = "none")
-```
-
-## Modelo de clasificación
-
-Como lo hemos hecho en las ayudantías pasadas, realizamos los primeros pasos típicos con tidymodels en el código a continuación. Es importante que para esta ayudantía utilizaremos solo `svm_linear`, y para la siguiente exploraremos las otras opciones.
-
-Para la especificación del modelo, tunearemos el parámetro de costo $C$ que aparece más arriba en el problema de optimización.
-
-```{r}
-# 1. División de los datos
-bankruptcy_split <- rsample::initial_split(
-  data = bankruptcy,
-  strata = bankrupt
-)
-
-bankruptcy_train <- rsample::training(bankruptcy_split)
-bankruptcy_test <- rsample::testing(bankruptcy_split)
-bankruptcy_cv <- rsample::vfold_cv(bankruptcy_train, v = 5, strata = bankrupt)
-
-# 2. Especificación del modelo
-bank_model <- parsnip::svm_linear(cost = tune()) %>%
-  set_engine("kernlab") %>%
-  set_mode("classification")
-
-# 3. Especificación de la receta
-bank_recipe <- recipes::recipe(bankrupt ~ ., data = bankruptcy_train) %>%
-  step_normalize(all_predictors())
-
-# 4. Modelo
-bank_wf <-
-  workflows::workflow() %>%
-  add_model(bank_model) %>%
-  add_recipe(bank_recipe)
-```
-
-
-### Tuning
-
-```{r}
-cost()
-bank_wf %>% extract_parameter_dials("cost")
-
-# Cambio en los valores
-c_par <- cost(range = c(-12, 5)) %>% grid_regular(levels = 10)
-metrics <- yardstick::metric_set(accuracy)
-
-# Grilla
-bank_tune <-
-  bank_wf %>%
-  tune_grid(
-    bankruptcy_cv,
-    grid = c_par,
-    metrics = metrics
-  )
-
-autoplot(bank_tune)
-```
-
-Algo importante de lo anterior es que notamos que el **accuracy** se mantiene constante, en un valor bastante alto, al cambiar el hiperparámetro de costo. ¿Es esto un indicador de que el modelo está funcionando bien?
-
-```{r}
-# Vemos el parámetro del mejor modelo
-select_best(bank_tune, metric = "accuracy")
-
-# Obtenemos el fit final
-bank_f_wf <-
-  bank_wf %>%
-  finalize_workflow(select_best(bank_tune, metric = "accuracy"))
-bank_f_wf
-
-# Ajustamos y predecimos
-bank_fit <-
-  bank_f_wf %>%
-  fit(bankruptcy_train)
-
-bank_predictions <-
-  bank_fit %>%
-  predict(new_data = bankruptcy_test) %>%
-  dplyr::bind_cols(bankruptcy_test) %>%
-  dplyr::select(bankrupt, .pred_class)
-head(bank_predictions, 10)
-```
-
-Notamos algo raro...
-
-```{r}
-table(bank_predictions$.pred_class)
-```
-
-Obviamente conseguimos un accuracy muy alto, ya que el modelo predijo que ninguna compañía está en bancarrota, y como éstas son más...
-
-Así, mejor veamos la matriz de confusión.
-
-```{r}
-conf_mat(
-  data = bank_predictions,
-  truth = bankrupt,
-  estimate = .pred_class
-)
-```
-
-En este caso hay dos métricas que son más de interés: **precision** y **recall**. Juntamos todo lo anterior en el código a continuación, utilizando ahora estas métricas.
-
-```{r}
-set.seed(219)
-
-# 1. División de los datos
-bankruptcy_split <- rsample::initial_split(
-  data = bankruptcy,
-  strata = bankrupt
-)
-
-bankruptcy_train <- rsample::training(bankruptcy_split)
-bankruptcy_test <- rsample::testing(bankruptcy_split)
-bankruptcy_cv <- rsample::vfold_cv(bankruptcy_train, v = 5, strata = bankrupt)
-
-# 2. Especificación del modelo
-bank_model <-
-  parsnip::svm_linear(cost = tune()) %>%
-  set_engine("kernlab") %>%
-  set_mode("classification")
-
-# 3. Especificación de la receta
-bank_recipe <- 
-  recipes::recipe(bankrupt ~ ., data = bankruptcy_train) %>%
-  step_normalize(all_predictors())
-
-# 4. Modelo
-bank_wf <-
-  workflows::workflow() %>%
-  add_model(bank_model) %>%
-  add_recipe(bank_recipe)
-
-# Cambio en los valores
-c_par <- cost(range = c(-12, 5)) %>% grid_regular(levels = 5)
-metrics <- yardstick::metric_set(precision, recall)
-
-# Grilla
-bank_tune <-
-  bank_wf %>%
-  tune_grid(
-    bankruptcy_cv,
-    grid = c_par,
-    metrics = metrics
-  )
-
-autoplot(bank_tune)
-
-# Vemos el parámetro del mejor modelo
-select_best(bank_tune, metric = "recall")
-
-# Obtenemos el fit final
-bank_f_wf <-
-  bank_wf %>%
-  finalize_workflow(select_best(bank_tune, metric = "precision"))
-bank_f_wf
-
-# Ajustamos y predecimos
-bank_fit <-
-  bank_f_wf %>%
-  fit(bankruptcy_train)
-
-bank_predictions <-
-  bank_fit %>%
-  predict(new_data = bankruptcy_test) %>%
-  dplyr::bind_cols(bankruptcy_test) %>%
-  dplyr::select(bankrupt, .pred_class)
-head(bank_predictions, 10)
-
-conf_mat(
-  data = bank_predictions,
-  truth = bankrupt,
-  estimate = .pred_class
-)
-```
-
-# SVM no lineal
-
-En la sección anterior asumimos que los datos son linealmente separables, o que al menos podíamos utilizar las variables slack tal que nos quedaran de esa manera. Dado los resultados obtenidos en la parte aplicada anterior, es posible que no existían maneras óptimas de incluir estas variables para así obtener una solución.
-
-¿Qué alternativas tenemos entonces?: lo que podemos hacer es encontrar un límite de decisión que no sea lineal.
-
-La forma en que hacemos lo anterior es transformando los datos de entrada en un espacio de mayor dimensión en el cual sí podamos encontrar un separador lineal. El problema de lo anterior es que el costo de resolver el problema de optimización en este nuevo espacio es demasiado alto.
-
-De todas maneras, es posible mostrar que el nuevo problema de optimización es equivalente al anterior, pero que ahora se cambian los productos punto $x_i^Tx_j$ por los productos punto en el nuevo espacio $\phi(x_i)^T\phi(x_j)$. ¿Qué nos dice esto?, esto nos dice que lo único que necesitamos realmente para resolver el problema es una función que dado dos valores $x_i$ y $x_j$ nos entregue el producto punto en el nuevo espacio, y esta función es la que se denomina **kernel**, denotada por
-
-$$
-K(x_i, x_j) = \phi(x_i)^T\phi(x_j) 
-$$
-
-En nuestro caso veremos dos kernels que están implementados en `parsnip`: el polinomial y el gaussiano (también conocido como RBF de Radial Basis Functions)
-
-## Modelamiento
-
-En nuestro caso utilizaremos el kernel gaussiano para mostrar las diferencias con el caso lineal. Definimos el modelo igual que antes, solo que ahora usamos `svm_rbf`. En este caso el único motor que acepta `parsnip` es `kernlab` y considera dos hiperparámetros: el costo $C$ y el parámetro del kernel $\sigma$.
-
-```{r}
-set.seed(219)
-
-# 1. División de los datos
-bankruptcy_split <- rsample::initial_split(
-  data = bankruptcy,
-  strata = bankrupt
-)
-
-bankruptcy_train <- rsample::training(bankruptcy_split)
-bankruptcy_test <- rsample::testing(bankruptcy_split)
-bankruptcy_cv <- rsample::vfold_cv(bankruptcy_train, v = 5, strata = bankrupt)
-
-# 2. Especificación del modelo
-bank_model <- parsnip::svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
-  set_engine("kernlab") %>%
-  set_mode("classification")
-
-# 3. Especificación de la receta
-bank_recipe <- recipes::recipe(bankrupt ~ ., data = bankruptcy_train) %>%
-  step_normalize(all_predictors())
-
-# 4. Modelo
-bank_wf <-
-  workflows::workflow() %>%
-  add_model(bank_model) %>%
-  add_recipe(bank_recipe)
-```
-
-### Tuning de los hiperparámetros
-
-En las ayudantías pasadas hemos realizado el tuning de los hiperparámetros de la misma manera: con grillas regulares. Es importante notar que esta no es la única forma, y que existen otras cada una con sus ventajas y desventajas.
-
-En particular, existen dos modos: búsqueda en grillas y búsqueda iterativa. En este caso nos enfocaremos en la búsqueda en grilla, la cual tiene subdivisiones en regulares e irregulares.
-
-Veamos por ejemplo en nuestro caso las diferencias:
-
-```{r}
-params_svm <- parameters(cost(), rbf_sigma())
-
-# Grilla regular
-regular <- grid_regular(params_svm, levels = c(5, 5))
-
-ggplot(regular, aes(x = cost, y = rbf_sigma)) +
-  geom_point()
-
-## Recordar que las escalas son transformadas
-cost()
-rbf_sigma()
-
-ggplot(regular, aes(x = cost, y = rbf_sigma)) +
-  geom_point() +
-  scale_y_log10() +
-  scale_x_continuous(trans = "log2") +
-  labs(title = "Grilla regular")
-```
-
-```{r}
-# Grilla aleatoria
-random <- grid_random(params_svm, size = 25)
-
-ggplot(random, aes(x = cost, y = rbf_sigma)) +
-  geom_point() +
-  scale_y_log10() +
-  scale_x_continuous(trans = "log2") +
-  labs(title = "Grilla irregular - aleatoria")
-```
-
-```{r}
-# Grilla "Space-filling designs"
-me <- grid_max_entropy(params_svm, size = 25)
-lh <- grid_latin_hypercube(params_svm, size = 25)
-
-p1 <- ggplot(me, aes(x = cost, y = rbf_sigma)) +
-  geom_point() +
-  scale_y_log10() +
-  scale_x_continuous(trans = "log2") +
-  labs(title = "Grilla irregular - Maximum Entropy")
-
-p2 <- ggplot(lh, aes(x = cost, y = rbf_sigma)) +
-  geom_point() +
-  scale_y_log10() +
-  scale_x_continuous(trans = "log2") +
-  labs(title = "Grilla irregular - Latin Hypercube")
-
-p1 + p2
-```
-
-Sin un motivo específico, utilizaremos la grilla de máxima entropía.
-
-```{r}
-metrics <- yardstick::metric_set(accuracy)
-
-bank_tune <-
-  bank_wf %>%
-  tune_grid(
-    bankruptcy_cv,
-    grid = me,
-    metrics = metrics
-  )
-
-autoplot(bank_tune)
-```
-
-Algo importante de lo anterior es que notamos que el **accuracy** se mantiene constante, en un valor bastante alto, al cambiar **ambos** hiperparámetros. Repetimos el análisis anterior.
-
-```{r}
-# Vemos el parámetro del mejor modelo
-select_best(bank_tune, metric = "accuracy")
-
-# Obtenemos el fit final
-bank_f_wf <-
-  bank_wf %>%
-  finalize_workflow(select_best(bank_tune, metric = "accuracy"))
-bank_f_wf
-
-# Ajustamos y predecimos
-bank_fit <-
-  bank_f_wf %>%
-  fit(bankruptcy_train)
-
-bank_predictions <-
-  bank_fit %>%
-  predict(new_data = bankruptcy_test) %>%
-  dplyr::bind_cols(bankruptcy_test) %>%
-  dplyr::select(bankrupt, .pred_class)
-head(bank_predictions, 10)
-```
-
-¿Ocurrirá lo mismo que la vez pasada?
-
-```{r}
-table(bank_predictions$.pred_class)
-```
-
-```{r}
-conf_mat(
-  data = bank_predictions,
-  truth = bankrupt,
-  estimate = .pred_class
-)
-```
-
-En este caso hay dos métricas que son más de interés: **precision** y **recall**. Juntamos todo lo anterior en el código a continuación, utilizando ahora estas métricas.
-
-```{r}
-set.seed(219)
-
-# 1. División de los datos
-bankruptcy_split <- rsample::initial_split(
-  data = bankruptcy,
-  strata = bankrupt
-)
-
-bankruptcy_train <- rsample::training(bankruptcy_split)
-bankruptcy_test <- rsample::testing(bankruptcy_split)
-bankruptcy_cv <- rsample::vfold_cv(bankruptcy_train, v = 5, strata = bankrupt)
-
-# 2. Especificación del modelo
-bank_model <-
-  parsnip::svm_rbf(cost = tune(), rbf_sigma = tune()) %>%
-  set_engine("kernlab") %>%
-  set_mode("classification")
-
-# 3. Especificación de la receta
-bank_recipe <- 
-  recipes::recipe(bankrupt ~ ., data = bankruptcy_train) %>%
-  step_normalize(all_predictors())
-
-# 4. Modelo
-bank_wf <-
-  workflows::workflow() %>%
-  add_model(bank_model) %>%
-  add_recipe(bank_recipe)
-
-# Cambio en los valores
-params_svm <- parameters(cost(), rbf_sigma())
-me <- grid_max_entropy(params_svm, size = 25)
-metrics <- yardstick::metric_set(precision, recall)
-
-# Grilla
-bank_tune <-
-  bank_wf %>%
-  tune_grid(
-    bankruptcy_cv,
-    grid = me,
-    metrics = metrics
-  )
-
-autoplot(bank_tune)
-
-# Vemos el parámetro del mejor modelo
-select_best(bank_tune, metric = "recall")
-
-# Obtenemos el fit final
-bank_f_wf <-
-  bank_wf %>%
-  finalize_workflow(select_best(bank_tune, metric = "recall"))
-bank_f_wf
-
-# Ajustamos y predecimos
-bank_fit <-
-  bank_f_wf %>%
-  fit(bankruptcy_train)
-
-bank_predictions <-
-  bank_fit %>%
-  predict(new_data = bankruptcy_test) %>%
-  dplyr::bind_cols(bankruptcy_test) %>%
-  dplyr::select(bankrupt, .pred_class)
-head(bank_predictions, 10)
-
-conf_mat(
-  data = bank_predictions,
-  truth = bankrupt,
-  estimate = .pred_class
-)
-```
-
-**Repitan lo mismo con `rbf_poly`**
-
-# Discusión: problemas multiclase

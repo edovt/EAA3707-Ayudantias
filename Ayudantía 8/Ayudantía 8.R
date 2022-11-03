@@ -71,7 +71,6 @@ mp_model <- parsnip::decision_tree(cost_complexity = tune(),
   set_mode("classification")
 
 # 3. Especificación de la receta
-## NOTA: Ver https://www.tmwr.org/pre-proc-table.html
 mp_recipe <- recipes::recipe(price_range ~ ., data = mp_train)
 
 # 4. Modelo
@@ -86,7 +85,6 @@ cost_complexity()
 tree_depth()
 min_n()
 
-## NOTA: Mencionar por qué acá el accuracy no trae tantos problemas
 metrics <- yardstick::metric_set(accuracy)
 
 # Grilla de partida
@@ -171,6 +169,8 @@ mp_wf_b <-
 mtry()
 trees()
 min_n()
+
+finalize(mtry(), x = select(mp_train, -price_range))
 
 # Grilla de partida
 start_grid <- 

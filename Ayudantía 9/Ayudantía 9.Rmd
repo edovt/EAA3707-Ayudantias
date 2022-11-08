@@ -1,0 +1,269 @@
+---
+title: "Ayudantía 9 - ML para Negocios &#127794;&#127794;&#127794;"
+date: "9 de noviembre del 2022"
+output:
+  html_document:
+    df_print: paged
+    theme: flatly
+    highlight: breezedark
+    toc: yes
+    toc_float: yes
+---
+
+```{=html}
+<style type="text/css">
+/* Whole document: */
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible&display=swap');
+body{
+  font-family: 'Atkinson Hyperlegible', sans-serif;
+  font-size: 15pt;
+  background-color: #f2f3ed;
+	
+}
+/* Headers */
+h1,h2,h3,h4,h5,h6{
+  font-size: 20pt;
+ font-color:#03DAC6; 
+}
+
+div.main-container {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+```
+
+```{r setup, include=FALSE, message=FALSE}
+library(here)
+
+
+## Global options
+knitr::opts_chunk$set(
+  cache = TRUE, fig.align = "center",
+  fig.height = 7, fig.width = 12
+)
+
+# Here
+here::i_am("Ayudantía 9/Ayudantía 9.Rmd")
+```
+
+# Introducción
+
+Bienvenid\@s a la novena ayudantía de EAA3707 - Machine Learning para Negocios. En la ayudantía veremos:
+
+1.  Métodos de ensemble
+    * Bagging
+    * Boosting
+
+Antes de comenzar, cargamos las librerías que utilizaremos durante la ayudantía.
+
+```{r librerias, message=FALSE, warning=FALSE}
+library(here)
+library(beepr)
+library(tidyverse)
+library(tidymodels)
+library(patchwork)
+library(skimr)
+library(corrplot)
+
+library(baguette)
+library(rpart)
+library(xgboost)
+
+# Para obtener resultados reproducibles
+set.seed(219)
+```
+
+Ocupamos las siguientes librerías nuevas:
+
+*   `beepr`: permite emitir sonidos al terminar de ejecutar un comando. Útil cuando estamos ajustando modelos pesados.
+*   `skimr`: permite echar fácilmente un vistazo inicial a los datos.
+*   `ranger`: uno de los motores aceptados por `parsnip` para ajustar bosques aleatorios.
+
+Les recuerdo los libros que les recomiendo para aprender de R:
+
+-   **Hands-On Programming with R**: disponible [acá](https://rstudio-education.github.io/hopr/). Útil para recordar cosas básicas de R.
+
+-   **Advanced R**: disponible [acá](https://adv-r.hadley.nz/). Para aprender R avanzado (realmente avanzado), si es que están interesados en entender cómo funciona R por detrás.
+
+-   **R for Data Science**: disponible [acá](https://r4ds.had.co.nz/). Bueno para aprender y aplicar Data Science de manera rápida, además de ser uno de los libros guía para aprender acerca de los paquetes de tidyverse.
+
+-   **RMarkdown Cookbook**: disponible [acá](https://bookdown.org/yihui/rmarkdown-cookbook/). Útil para aprender lo básico de RMarkdown.
+
+-   **RMarkdown: The Definitive Guide**: disponible [acá](https://bookdown.org/yihui/rmarkdown/). Útil para aprender cosas avanzadas de RMarkdown.
+
+-   **Tidy Modeling with R**: disponible [acá](https://www.tmwr.org/). Recomendado para aprender del ecosistema tidymodels. Tiene también un capítulo pequeño de tidyverse con lo justo y necesario.
+
+# Árboles de Decisión
+
+<center>![Árbol de Decisión y sus elementos. Créditos Yulia Kosarenko - Why Change Consulting](https://i0.wp.com/why-change.com/wp-content/uploads/2021/11/Decision-Tree-elements-2.png?resize=715%2C450&ssl=1){height="500px" width="750px"}</center>
+
+Los Árboles de Decisión corresponden a un modelo de clasificación, esto es, se dispone de un conjunto de datos previamente rotulados con la clase a la que pertenece cada observación. Una de las ventajas de este modelo es que es bastante simple y a la vez fácil de interpretar.
+
+En particular, lo que hace es segmentar el espacio de predictores, de manera recursiva, y realizar una misma predicción para cada región final, correspondiente a la clase de mayor frecuencia.
+
+**Nota**: Los modelos de árboles también pueden ser utilizados para regresión. Lo veremos más adelante.
+
+Dentro de los árboles, tanto de decisión como de regresión, es importante la siguiente terminología:
+
+*   **Raíz**: Regla de decisión inicial del modelo
+*   **Ramas**: Caminos que sigue el árbol
+*   **Nodo interno**: Puntos intermedios en los cuales el árbol se divide de acuerdo a alguna regla de decisión
+*   **Nodo terminal u hoja**: Fin de una rama en la cual el árbol deja de dividirse. En este punto se realiza la clasificación.
+
+## Criterios de división
+
+¿Cómo segmentamos el espacio de predictores?. Una de las opciones más intuitivas es la de utilizar la tasa de clasificación incorrecta, pero se ha visto que empíricamente esta alternativa no funciona muy bien.
+
+Así, entre las propuestas se encuentran dos que son bastante utilizadas: el Índice Gini y la Entropía.
+
+### Índice Gini
+
+Dado un conjunto de observaciones $D$ con $p_i$ la proporción de ellas que pertenecen a la i-ésima clase, se define el **Índice de Gini** como
+
+$$
+\begin{equation*}
+  \text{Gini}(D) = 1 - \sum_{i=1}^m p_i^2
+\end{equation*}
+$$
+
+### Entropía
+
+La idea de esta medida es que, si una clase es muy poco común, el saber que una observación dada pertenece a dicha clase entrega mucha información y, de manera equivalente, si una clase es común entonces la pertenencia entrega poca información. En particular, se tiene
+
+$$
+\begin{equation*}
+  \text{Entropía}(D) = -\sum_{i=1}^m p_i \log_2 p_i
+\end{equation*}
+$$
+Luego, debemos elegir el atributo que tenga una mayor reducción esperada en entropía, esto es,
+
+$$
+\text{Gain}(S, A) = \text{Entropía}(S) - \sum_{v \in A}\frac{|S_v|}{|S|}\text{Entropía}(S_r)
+$$
+
+donde $S$ es el set original, $A$ es algún atributo y $S_r$ es la entropía del sub-grupo $r$ de $A$.
+
+## Overfitting
+
+Uno de los problemas de los árboles de decisión es que fácilmente podemos caer en el problema de overfitting si no nos cuidamos de ajustar un modelo con muchas ramificaciones. Para cuidarnos de lo anterior, existen varias opciones:
+
+* **Poda de un árbol**: Para esto, se introduce un parámetro de complejidad, comúnmente denotado por $\alpha$ o $Cp$. Este parámetro controla el tamaño total del árbol, penalizando por el número total de nodos finales.
+* **Tree Depth**: Controla la máxima profundidad del árbol.
+* **Mínimo n**: Mínimo número de puntos en un nodo requeridos para que el nodo se vuelva a dividir.
+
+
+# Random Forests
+
+La idea de los Bosques Aleatorios es bastante simple, y es que se unen muchos árboles de decisión. Para esto, se entrenan $L$ árboles de decisión, usando en cada caso $N$ datos de entrenamiento, normalmente muestreados con reemplazo. Finalmente, la clasificación está dada por la predicción más común entre los $L$ árboles resultantes (majority vote)
+
+Además, en cada división estos árboles consideran solo un conjunto $m < M$ de atributos disponibles, elegidos de manera aleatoria.
+
+# Búsqueda Iterativa
+
+En las ayudantías anteriores hemos visto dos maneras de búsqueda de hiperparámetros, ambas de la categoría de grillas: grillas regulares y grillas aleatorias.
+
+En esta ayudantía presentaremos una forma diferente de buscar estos valores y es a través de búsqueda iterativa. Estos algoritmos consideran diferentes puntos de partida y va considerando valores cercanos que vayan optimizando la métrica deseada. Así, la diferencia con las grillas regulares es que no fija los valores a buscar al principio del algoritmo, si no que los va considerando en cada iteración.
+
+Podemos ver la diferencia de los tres algoritmos a continuación.
+
+<center>![Búsqueda en grillas regulares. Créditos https://en.wikipedia.org/wiki/Hyperparameter_optimization](https://r4ds.github.io/bookclub-tmwr/images/grid_search-hyperparameter.png){height="500px" width="750px"}</center>
+
+<center>![Búsqueda en grillas aleatorias. Créditos https://en.wikipedia.org/wiki/Hyperparameter_optimization](https://r4ds.github.io/bookclub-tmwr/images/random_search-hyperparameter.png){height="500px" width="750px"}</center>
+
+<center>![Búsqueda iterativa. Créditos https://en.wikipedia.org/wiki/Hyperparameter_optimization](https://r4ds.github.io/bookclub-tmwr/images/bayesian_optimization-hyperparameter.png){height="500px" width="750px"}</center>
+
+Es importante notar que uno de los problemas de este algoritmo es que no podemos asegurar la convergencia a un mínimo/máximo global, sino que solo a locales. De todas maneras, una de las formas de aliviar este problema es considerar diferentes puntos de partida en el espacio de búsqueda.
+
+En particular, tidymodels nos deja realizar optimización bayesiana a través de la función `tune_bayes`.
+
+# Ejemplo: Clasificación de precios de teléfonos
+
+<center>![Créditos: The Verge](https://cdn0.vox-cdn.com/thumbor/QH2zaur_qnCJUmxY6FBpsgU-hoo=/0x1080/volume-assets.voxmedia.com/production/97b73cbb0cf93288fd8a8b28034fbb4b/bigpic_money.jpg){height="500px" width="900px"}</center>
+
+Harto del número reducido de empresas de teléfonos celulares, usted decide iniciar su propia compañía que logre competir con las diferentes empresas globales importantes.
+
+Uno de los problemas es poder estimar el precio de los celulares que producirá, para lo cual decide recolectar datos de diferentes celulares y el rango de precios al que pertenecen. Utilizando estos datos, desea entrenar un modelo de clasificación que le permita definir un rango de precios para sus futuros productos.
+
+Estos datos se encuentran en la base de datos `mobile_price.csv`. Entre las variables se encuentran:
+
+* **battery_power**: energía total que puede almacenar, en mAh
+* **blue**: tiene bluetooth o no
+* **clock_speed**: velocidad del microproceasador
+* **dual_sim**: tiene soporte para dual sim o no
+* **fc**: megapixeles de la cámara frontal (0 si no tiene cámara frontal)
+* **four_g**: si tiene o no 4G
+* **int_memory**: memoria interna en GB
+* **pc**: megapixeles de la cámara principal
+* **px_height**: resolución a lo alto
+* **px_widht**: resolución a lo ancho
+* **ram**: memoria RAM del dispositivo en megabytes
+* **sc_h**: alto de la pantalla en centímetros
+* **sc_w**: ancho de la pantalla en centímetros
+* **price_range**: variable respuesta. Toma los valores 0 (bajo costo), 1 (costo medio), 2 (costo alto) y 3 (costo muy alto)
+
+## Análisis exploratorio
+
+Importemos en primer lugar nuestros datos y demos un primer vistazo inicial.
+
+```{r carga datos}
+# Cargamos los datos
+mobile_prices_unclean <- readr::read_csv(here("Ayudantía 8", "mobile_price.csv"),
+                                         show_col_types = FALSE)
+
+# Damos un vistazo
+skimr::skim(mobile_prices_unclean)
+```
+
+Notamos en particular que algunas variables que deberían ser factor aparecen como numéricas, así que debemos cambiarlas.
+
+```{r cambio a factor}
+mobile_prices <- mobile_prices_unclean %>% 
+  dplyr::mutate(blue = factor(blue, levels=c(1, 0), labels=c("Yes", "No")),
+                dual_sim = factor(dual_sim, levels=c(1, 0), labels=c("Yes", "No")),
+                four_g = factor(four_g, levels=c(1, 0), labels=c("Yes", "No")),
+                three_g = factor(three_g, levels=c(1, 0), labels=c("Yes", "No")),
+                touch_screen = factor(touch_screen, levels=c(1, 0),
+                                      labels=c("Yes", "No")),
+                wifi = factor(wifi, levels=c(1, 0), labels=c("Yes", "No")),
+                price_range = factor(price_range, levels=c(0, 1, 2, 3),
+                                     labels=c("Low", "Medium", "High", "Very High"),
+                                     ordered = TRUE))
+
+skimr::skim(mobile_prices)
+```
+
+Así, tenemos 14 variables numéricas y 7 categóricas, incluyendo la variable respuesta.
+
+Como análisis exploratorio, podemos ver en primer lugar la correlación entre las variables númericas presentes en la base de datos.
+
+```{r correlacion, echo=FALSE}
+mobile_prices %>% 
+  select_if(is.numeric) %>% 
+  cor() %>% 
+  corrplot::corrplot()
+```
+
+Notamos que existe una baja correlación excepto entre variables que intuitivamente sí deberían estar correlacionadas entre sí.
+
+Por otro lado, podemos elegir dos variables al azar y realizar boxplots para ver si existen relaciones entre alguna de ellas con el rango de precios. Para este ejemplo, tomé la velocidad del procesador y la memoria RAM.
+
+```{r boxplots, echo=FALSE}
+p1 <- ggplot(mobile_prices,
+             mapping = aes(x = price_range, y = clock_speed, fill = price_range)) +
+  geom_boxplot() +
+  labs(title = "Relación entre velocidad del procesador y rango de precio",
+       x = "Rango de precio", y = "Velocidad del procesador")
+
+p2 <- ggplot(mobile_prices,
+             mapping = aes(x = price_range, y = ram, fill = price_range)) +
+  geom_boxplot() +
+  labs(title = "Relación entre memoria RAM y rango de precio",
+       x = "Rango de precio", y = "Memoria RAM")
+
+p1 + p2
+```
+
+Notamos que pareciera no existir una relación con la primera variable, pero sí una clara relación positiva entre la memoria RAM con el precio.
+

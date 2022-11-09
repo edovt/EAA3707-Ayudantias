@@ -200,7 +200,10 @@ mp_bayesopt_b <-
     resamples = mp_cv,
     metrics = metrics,
     initial = mp_start_b,
-    iter = 20,
+    param_info = parameters(finalize(mtry(), x = select(mp_train, -price_range)),
+                            trees(),
+                            min_n()),
+    iter = 10,
     control = ctrl
   ) ; beepr::beep(1)
 

@@ -55,7 +55,6 @@ Bienvenid\@s a la novena ayudantía de EAA3707 - Machine Learning para Negocios.
 1.  Métodos de ensamble
     * Bagging
     * Boosting
-    * Stacking
 
 Antes de comenzar, cargamos las librerías que utilizaremos durante la ayudantía.
 
@@ -68,21 +67,28 @@ library(patchwork)
 library(skimr)
 library(corrplot)
 
+library(doParallel)
 library(baguette)
-library(stacks)
 library(rpart)
 library(xgboost)
 
 
 # Para obtener resultados reproducibles
 set.seed(219)
+
+# OJO: vean bien el número de all_cores
+all_cores <- parallel::detectCores(logical = FALSE)
+all_cores
+cl <- makePSOCKcluster(all_cores - 2)
+registerDoParallel(cl)
 ```
 
-**Cambiar**: Ocupamos las siguientes librerías nuevas:
+Ocupamos las siguientes librerías nuevas:
 
-*   `beepr`: permite emitir sonidos al terminar de ejecutar un comando. Útil cuando estamos ajustando modelos pesados.
+*   `doParallel`: permite ajustar modelos de manera paralela. Ojo con el número de núcleos a utilizar.
 *   `skimr`: permite echar fácilmente un vistazo inicial a los datos.
-*   `ranger`: uno de los motores aceptados por `parsnip` para ajustar bosques aleatorios.
+*   `baguette`: necesario para poder ajustar un modelo de ensamble tipo Bagging.
+*   `xgboost`: uno de los motores que acepta `parsnip` para ajustar modelos de ensamble tipo Boosting.
 
 Les recuerdo los libros que les recomiendo para aprender de R:
 
@@ -104,7 +110,7 @@ Les recuerdo los libros que les recomiendo para aprender de R:
 
 Como vieron en clases, los métodos de ensamble ayudan a mejorar los resultados de modelos de Machine Learning, mediante la combinación de varios modelos, generando modelos de predicción robustos. Estos métodos pueden ser utilizados con cualquier modelo, pero generalmente se trabaja con árboles de decisión.
 
-En la ayudantía veremos tres métodos: Bagging, Boosting y Stacking. Los primeros dos son homogéneos, esto es, consideran un conjunto de modelos iguales.
+En la ayudantía veremos dos métodos: Bagging, Boosting.
 
 ## Bagging
 
@@ -124,7 +130,7 @@ El Boosting también es un modelo homogéneo, pero que funciona de forma secuenc
 
 En particular, existen dos métodos de boosting: Gradient boosting y Adaptive boosting (AdaBoost). Nosotros nos enfocaremos en Gradient Boosting.
 
-## Stacking
+## Extra: Stacking
 
 <center>![Stacking (Créditos: https://towardsdatascience.com/ensemble-methods-bagging-boosting-and-stacking-c9214a10a205)](https://miro.medium.com/max/1400/1*ZucZsXkOwrpY2XaPh6teRw@2x.webp)</center>
 
@@ -143,91 +149,371 @@ Por otro lado, como Boosting ajusta modelos uno por uno, esta técnica se suele 
 
 <center>![Créditos: Bank for Investment and Development of Vietnam (BIDV)](https://static.tapchitaichinh.vn/images/upload/hoangthuviet/01182022/chinh-sach-tai-khoa.jpg){height="500px" width="900px"}</center>
 
-https://www.kaggle.com/datasets/rashmiranu/banking-dataset-classification?select=new_train.csv
+Últimamente, ha habido una disminución en los ingresos del Banco de Portugal, por lo que les gustaría saber qué acciones tomar. Después de diferentes estudios, logran descubrir que la causa principal es que los clientes no están invirtiendo lo suficiente en depósitos a largo plazo. Por esta razón, al banco le gustaría identificar a los clientes que tienen una mayor probabilidad de suscribirse a un depósito a largo plazo, para así centrar los esfuerzos de marketing en aquellos clientes.
 
+Para ajustar el modelo, le han entregado la base de datos `banking.csv`, que contiene información de diferentes clientes que fueron contactados vía telefónica para ofrecer depósitos a largo plazo. Entre las variables se encuentran:
 
-Harto del número reducido de empresas de teléfonos celulares, usted decide iniciar su propia compañía que logre competir con las diferentes empresas globales importantes.
+* **age**: edad del cliente
+* **job**: tipo de trabajo
+* **marital**: estado civil del cliente
+* **education**: nivel educacional
+* **default**: si el cliente tiene crédito sin pagar
+* **housing**: si el cliente tiene un préstamo de vivienda
+* **loan**: si el cliente tiene un préstamo personal
+* **contact**: canal de comunicación
+* **day_of_week**: día del último contacto
+* **duration**: duración del último contacto, en segundos
+* **campaing**: número de contactos durante la campaña
+* **pdays**: número de días que transcurrieron desde la última campaña (999 significa que no ha sido contactado anteriormente)
+* **previous**: número de contactos antes de la campaña
+* **poutcome**": resultado de la campaña pasada
+* **y**: variable respuesta que indica si el cliente realizó un depósito a largo plazo.
 
-Uno de los problemas es poder estimar el precio de los celulares que producirá, para lo cual decide recolectar datos de diferentes celulares y el rango de precios al que pertenecen. Utilizando estos datos, desea entrenar un modelo de clasificación que le permita definir un rango de precios para sus futuros productos.
-
-Estos datos se encuentran en la base de datos `mobile_price.csv`. Entre las variables se encuentran:
-
-* **battery_power**: energía total que puede almacenar, en mAh
-* **blue**: tiene bluetooth o no
-* **clock_speed**: velocidad del microproceasador
-* **dual_sim**: tiene soporte para dual sim o no
-* **fc**: megapixeles de la cámara frontal (0 si no tiene cámara frontal)
-* **four_g**: si tiene o no 4G
-* **int_memory**: memoria interna en GB
-* **pc**: megapixeles de la cámara principal
-* **px_height**: resolución a lo alto
-* **px_widht**: resolución a lo ancho
-* **ram**: memoria RAM del dispositivo en megabytes
-* **sc_h**: alto de la pantalla en centímetros
-* **sc_w**: ancho de la pantalla en centímetros
-* **price_range**: variable respuesta. Toma los valores 0 (bajo costo), 1 (costo medio), 2 (costo alto) y 3 (costo muy alto)
+Es importante el hecho que los datos faltantes están marcados como "unknown", por lo que debemos trabajarlos acordemente.
 
 ## Análisis exploratorio
 
 Importemos en primer lugar nuestros datos y demos un primer vistazo inicial.
 
 ```{r carga datos}
-# Cargamos los datos
-mobile_prices_unclean <- readr::read_csv(here("Ayudantía 8", "mobile_price.csv"),
-                                         show_col_types = FALSE)
+# Cargamos los datos (notar na = "unknown")
+banking_unclean <- readr::read_csv(here("Ayudantía 9", "banking.csv"), na = "unknown",
+                                   show_col_types = FALSE)
 
 # Damos un vistazo
-skimr::skim(mobile_prices_unclean)
+skimr::skim(banking_unclean)
 ```
 
-Notamos en particular que algunas variables que deberían ser factor aparecen como numéricas, así que debemos cambiarlas.
+Notamos dos cosas importantes. En primer lugar, las variables que debiesen ser factores aparecen como variables de tipo string, por lo que debemos cambiarlas. Por otro lado, también notamos un alto número de observaciones faltantes.
+
+Como no conocemos aún técnicas para trabajar con datos faltantes, simplemente las eliminaremos de la base de datos. Por otro lado, para simplificar el trabajo, eliminaremos la variable `pdays`.
 
 ```{r cambio a factor}
-mobile_prices <- mobile_prices_unclean %>% 
-  dplyr::mutate(blue = factor(blue, levels=c(1, 0), labels=c("Yes", "No")),
-                dual_sim = factor(dual_sim, levels=c(1, 0), labels=c("Yes", "No")),
-                four_g = factor(four_g, levels=c(1, 0), labels=c("Yes", "No")),
-                three_g = factor(three_g, levels=c(1, 0), labels=c("Yes", "No")),
-                touch_screen = factor(touch_screen, levels=c(1, 0),
-                                      labels=c("Yes", "No")),
-                wifi = factor(wifi, levels=c(1, 0), labels=c("Yes", "No")),
-                price_range = factor(price_range, levels=c(0, 1, 2, 3),
-                                     labels=c("Low", "Medium", "High", "Very High"),
-                                     ordered = TRUE))
+banking <- banking_unclean %>% 
+  na.omit() %>% 
+  dplyr::select(-pdays) %>% 
+  dplyr::mutate(
+    job = factor(job),
+    marital = factor(marital),
+    education = factor(education),
+    default = factor(default, levels=c("yes", "no"), labels=c("Yes", "No")),
+    housing = factor(housing, levels=c("yes", "no"), labels=c("Yes", "No")),
+    loan = factor(loan, levels=c("yes", "no"), labels=c("Yes", "No")),
+    contact = factor(contact),
+    month = factor(month, 
+                   levels=c("jan", "feb", "mar", "apr", "may", "jun", "jul",
+                              "aug", "sep", "oct", "nov", "dec"),
+                   ordered=TRUE),
+    day_of_week = factor(day_of_week,
+                         levels=c("mon", "tue", "wed", "thu", "fri"),
+                         ordered=TRUE),
+    poutcome = factor(poutcome),
+    y = factor(y, levels=c("yes", "no"), labels=c("Yes", "No")))
 
-skimr::skim(mobile_prices)
+skimr::skim(banking)
 ```
 
-Así, tenemos 14 variables numéricas y 7 categóricas, incluyendo la variable respuesta.
+Así, tenemos 4 variables numéricas y 11 categóricas, incluyendo la variable respuesta. Notamos que en este caso la proporción de clientes que realizó un depósito a plazo es de un 12.6\%
 
 Como análisis exploratorio, podemos ver en primer lugar la correlación entre las variables númericas presentes en la base de datos.
 
 ```{r correlacion, echo=FALSE}
-mobile_prices %>% 
+banking %>% 
   select_if(is.numeric) %>% 
   cor() %>% 
   corrplot::corrplot()
 ```
 
-Notamos que existe una baja correlación excepto entre variables que intuitivamente sí deberían estar correlacionadas entre sí.
-
-Por otro lado, podemos elegir dos variables al azar y realizar boxplots para ver si existen relaciones entre alguna de ellas con el rango de precios. Para este ejemplo, tomé la velocidad del procesador y la memoria RAM.
+Notamos que existe una baja correlación.
 
 ```{r boxplots, echo=FALSE}
-p1 <- ggplot(mobile_prices,
-             mapping = aes(x = price_range, y = clock_speed, fill = price_range)) +
+p1 <- ggplot(banking, mapping = aes(x = y, y = age, fill = y)) +
   geom_boxplot() +
-  labs(title = "Relación entre velocidad del procesador y rango de precio",
-       x = "Rango de precio", y = "Velocidad del procesador")
+  labs(title = "Relación entre la edad y depósito a plazo",
+       x = "Depósito a plazo", y = "Edad")
 
-p2 <- ggplot(mobile_prices,
-             mapping = aes(x = price_range, y = ram, fill = price_range)) +
+p2 <- ggplot(banking, mapping = aes(x = y, y = duration, fill = y)) +
   geom_boxplot() +
-  labs(title = "Relación entre memoria RAM y rango de precio",
-       x = "Rango de precio", y = "Memoria RAM")
+  labs(title = "Relación entre la duración de la llamada y depósito a plazo",
+       x = "Depósito a plazo", y = "Edad")
 
 p1 + p2
 ```
 
-Notamos que pareciera no existir una relación con la primera variable, pero sí una clara relación positiva entre la memoria RAM con el precio.
+Antes de pasar al modelamiento con Bagging y Boosting, realizamos la división de los datos que será común a ambos.
 
+```{r data split}
+banking_split <- rsample::initial_split(
+  data = banking,
+  strata = y
+)
+
+bnk_train <- rsample::training(banking_split)
+bnk_test <- rsample::testing(banking_split)
+bnk_cv <- rsample::vfold_cv(bnk_train, v = 5, strata = y)
+```
+
+## Modelamiento: Bagging
+
+En primer lugar, especificamos la receta. Siguiendo los pasos sugeridos por el libro Tidy Modeling with R, no realizamos ningún paso previo.
+
+```{r recipe bag}
+bnk_recipe <- recipes::recipe(y ~ ., data = bnk_train)
+```
+
+Luego, especificamos el modelo + el workflow a utilizar. En particular, realizaremos una optimización para los hiperparámetros `cost_complexity`, `tree_depth`, y `min_n`.
+
+```{r mod bag}
+## OJO: al parecer hay un error interno al usar tune() con class_cost
+## ?bag_tree
+## class_cost()
+
+bnk_model_bag <-
+  parsnip::bag_tree(
+    cost_complexity = tune(),
+    tree_depth = tune(),
+    min_n = tune()) %>%
+  set_engine("rpart", times = 25) %>%
+  set_mode("classification")
+translate(bnk_model_bag)
+
+bnk_wf_bag <- 
+  workflows::workflow() %>% 
+  add_model(bnk_model_bag) %>% 
+  add_recipe(bnk_recipe)
+bnk_wf_bag
+```
+
+### Tuning
+
+Realizamos el tuning de los hiperparámetros usando búsqueda bayesiana, de la misma manera que la ayudantía pasada. Para esta vez, utilizaremos la métrica del área bajo la curva ROC.
+
+```{r tuning bag}
+metrics <- yardstick::metric_set(roc_auc)
+parameters <- extract_parameter_set_dials(bnk_wf_bag)
+parameters
+
+start_grid <- 
+  parameters %>% 
+  grid_regular()
+
+bnk_start_bag <- bnk_wf_bag %>% 
+  tune_grid(
+    resamples = bnk_cv,
+    grid = start_grid,
+    metrics = metrics,
+  ) ; beepr::beep(1)
+
+autoplot(bnk_start_bag)
+show_best(bnk_start_bag)
+
+bnk_bayes_bag <- bnk_wf_bag %>% 
+  tune_bayes(
+    resamples = bnk_cv,
+    metrics = metrics,
+    initial = bnk_start_bag,
+    iter = 10
+  ) ; beepr::beep(1)
+
+autoplot(bnk_bayes_bag, type = "performance")
+autoplot(bnk_bayes_bag, type = "parameters")
+
+select_best(bnk_bayes_bag)
+```
+
+### Ajuste final y métricas
+
+Ya teniendo los hiperparámetros optimizados, realizamos el ajuste final junto con las predicciones.
+
+```{r pred bag}
+bnk_final_wf_bag <- bnk_wf_bag %>% 
+  finalize_workflow(select_best(bnk_bayes_bag))
+bnk_final_wf_bag
+
+# Ajustamos y predecimos
+bnk_bag_fit <- bnk_final_wf_bag %>% 
+  fit(bnk_train)
+
+bnk_bag_predictions <- 
+  bnk_bag_fit %>% 
+  predict(new_data = bnk_test) %>% 
+  dplyr::bind_cols(bnk_test) %>% 
+  dplyr::select(y, .pred_class)
+head(bnk_bag_predictions)
+
+# Matriz de confusión y recall
+conf_mat_bag <- conf_mat(
+  data = bnk_bag_predictions,
+  truth = y,
+  estimate = .pred_class
+)
+
+autoplot(conf_mat_bag, "heatmap")
+
+bnk_bag_probs <- 
+  bnk_bag_fit %>% 
+  predict(new_data = bnk_test, type = "prob") %>% 
+  dplyr::bind_cols(bnk_test) %>% 
+  dplyr::select(y, .pred_Yes)
+
+head(bnk_bag_probs)
+roc_bag <- roc_curve(
+  data = bnk_bag_probs,
+  truth = y,
+  estimate = .pred_Yes
+)
+
+plot_roc_bag <- autoplot(roc_bag) +
+  labs(title = "Bagging")
+plot_roc_bag
+
+auc_bag <- roc_auc(
+  data = bnk_bag_probs,
+  truth = y,
+  .pred_Yes
+)
+
+recall_bag <- recall(
+  data = bnk_bag_predictions,
+  truth = y,
+  estimate = .pred_class
+)
+
+auc_bag
+recall_bag
+```
+
+## Modelamiento: Boosting
+
+Repetimos lo mismo ahora utilizando boosting. En este caso es necesario pasar las variables categóricas a dummy.
+
+```{r boosting}
+bnk_recipe_boost <- recipes::recipe(y ~ ., data = bnk_train) %>% 
+  step_dummy(all_nominal_predictors())
+
+bnk_model_boost <-
+  parsnip::boost_tree(
+    tree_depth = tune(),
+    min_n = tune(),
+    mtry = tune(),
+    learn_rate = tune()
+  ) %>%
+  set_engine("xgboost") %>%
+  set_mode("classification")
+translate(bnk_model_boost)
+
+bnk_wf_boost <- 
+  workflows::workflow() %>% 
+  add_model(bnk_model_boost) %>% 
+  add_recipe(bnk_recipe_boost)
+bnk_wf_boost
+
+# Tuning
+metrics <- yardstick::metric_set(roc_auc)
+parameters <- parameters(
+  finalize(mtry(), bnk_train),
+  min_n(),
+  tree_depth(),
+  learn_rate()
+)
+parameters
+
+start_grid <- 
+  parameters %>% 
+  grid_regular()
+
+bnk_start_boost <- bnk_wf_boost %>% 
+  tune_grid(
+    resamples = bnk_cv,
+    grid = start_grid,
+    metrics = metrics,
+  ) ; beepr::beep(1)
+
+autoplot(bnk_start_boost)
+show_best(bnk_start_boost)
+
+bnk_bayes_boost <- bnk_wf_boost %>% 
+  tune_bayes(
+    resamples = bnk_cv,
+    metrics = metrics,
+    initial = bnk_start_boost,
+    param_info = parameters,
+    iter = 10
+  ) ; beepr::beep(1)
+
+autoplot(bnk_bayes_boost, type = "performance")
+autoplot(bnk_bayes_boost, type = "parameters")
+
+select_best(bnk_bayes_boost)
+
+# Obtenemos el fit final
+bnk_final_wf_boost <- bnk_wf_boost %>% 
+  finalize_workflow(select_best(bnk_bayes_boost))
+bnk_final_wf_boost
+
+# Ajustamos y predecimos
+bnk_boost_fit <- bnk_final_wf_boost %>% 
+  fit(bnk_train)
+
+bnk_boost_predictions <- 
+  bnk_boost_fit %>% 
+  predict(new_data = bnk_test) %>% 
+  dplyr::bind_cols(bnk_test) %>% 
+  dplyr::select(y, .pred_class)
+head(bnk_boost_predictions)
+
+# Matriz de confusión y recall
+conf_mat_boost <- conf_mat(
+  data = bnk_boost_predictions,
+  truth = y,
+  estimate = .pred_class
+)
+
+autoplot(conf_mat_boost, "heatmap")
+
+# Probabilidades para la curva ROC
+bnk_boost_probs <- 
+  bnk_boost_fit %>% 
+  predict(new_data = bnk_test, type = "prob") %>% 
+  dplyr::bind_cols(bnk_test) %>% 
+  dplyr::select(y, .pred_Yes)
+head(bnk_boost_probs)
+
+roc_boost <- roc_curve(
+  data = bnk_boost_probs,
+  truth = y,
+  estimate = .pred_Yes
+)
+
+plot_roc_boost <- autoplot(roc_boost) +
+  labs(title = "Boosting")
+plot_roc_boost
+
+auc_boost <- roc_auc(
+  data = bnk_boost_probs,
+  truth = y,
+  .pred_Yes
+)
+
+recall_boost <- recall(
+  data = bnk_boost_predictions,
+  truth = y,
+  estimate = .pred_class
+)
+recall_boost
+```
+
+## Comparación de resultados
+
+Finalmente, comparamos ambos modelos con el AUC y el Recall.
+
+```{r comparación}
+plot_roc_bag + plot_roc_boost
+
+cat(" AUC Bagging:  ", as.character(auc_bag[3]), "\n",
+    "AUC Boosting: ", as.character(auc_boost[3]))
+
+cat(" Recall Bagging:  ", as.character(recall_bag[3]), "\n",
+    "Recall Boosting: ", as.character(recall_boost[3]))
+
+```

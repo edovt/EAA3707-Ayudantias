@@ -52,9 +52,10 @@ here::i_am("Ayudantía 9/Ayudantía 9.Rmd")
 
 Bienvenid\@s a la novena ayudantía de EAA3707 - Machine Learning para Negocios. En la ayudantía veremos:
 
-1.  Métodos de ensemble
+1.  Métodos de ensamble
     * Bagging
     * Boosting
+    * Stacking
 
 Antes de comenzar, cargamos las librerías que utilizaremos durante la ayudantía.
 
@@ -68,14 +69,16 @@ library(skimr)
 library(corrplot)
 
 library(baguette)
+library(stacks)
 library(rpart)
 library(xgboost)
+
 
 # Para obtener resultados reproducibles
 set.seed(219)
 ```
 
-Ocupamos las siguientes librerías nuevas:
+**Cambiar**: Ocupamos las siguientes librerías nuevas:
 
 *   `beepr`: permite emitir sonidos al terminar de ejecutar un comando. Útil cuando estamos ajustando modelos pesados.
 *   `skimr`: permite echar fácilmente un vistazo inicial a los datos.
@@ -95,92 +98,53 @@ Les recuerdo los libros que les recomiendo para aprender de R:
 
 -   **Tidy Modeling with R**: disponible [acá](https://www.tmwr.org/). Recomendado para aprender del ecosistema tidymodels. Tiene también un capítulo pequeño de tidyverse con lo justo y necesario.
 
-# Árboles de Decisión
+# Métodos de ensamble
 
-<center>![Árbol de Decisión y sus elementos. Créditos Yulia Kosarenko - Why Change Consulting](https://i0.wp.com/why-change.com/wp-content/uploads/2021/11/Decision-Tree-elements-2.png?resize=715%2C450&ssl=1){height="500px" width="750px"}</center>
+<center>![Métodos de ensamble - Créditos Kristina Grigaitytė, Turing College](https://blog.turingcollege.com/content/images/2021/10/Ensemble-learning.png){height="500px" width="750px"}</center>
 
-Los Árboles de Decisión corresponden a un modelo de clasificación, esto es, se dispone de un conjunto de datos previamente rotulados con la clase a la que pertenece cada observación. Una de las ventajas de este modelo es que es bastante simple y a la vez fácil de interpretar.
+Como vieron en clases, los métodos de ensamble ayudan a mejorar los resultados de modelos de Machine Learning, mediante la combinación de varios modelos, generando modelos de predicción robustos. Estos métodos pueden ser utilizados con cualquier modelo, pero generalmente se trabaja con árboles de decisión.
 
-En particular, lo que hace es segmentar el espacio de predictores, de manera recursiva, y realizar una misma predicción para cada región final, correspondiente a la clase de mayor frecuencia.
+En la ayudantía veremos tres métodos: Bagging, Boosting y Stacking. Los primeros dos son homogéneos, esto es, consideran un conjunto de modelos iguales.
 
-**Nota**: Los modelos de árboles también pueden ser utilizados para regresión. Lo veremos más adelante.
+## Bagging
 
-Dentro de los árboles, tanto de decisión como de regresión, es importante la siguiente terminología:
+<center>![Bagging (Créditos: https://towardsdatascience.com/ensemble-methods-bagging-boosting-and-stacking-c9214a10a205)](https://miro.medium.com/max/4800/1*zAMhmZ78a6V9W878zfk5eA@2x.webp)</center>
 
-*   **Raíz**: Regla de decisión inicial del modelo
-*   **Ramas**: Caminos que sigue el árbol
-*   **Nodo interno**: Puntos intermedios en los cuales el árbol se divide de acuerdo a alguna regla de decisión
-*   **Nodo terminal u hoja**: Fin de una rama en la cual el árbol deja de dividirse. En este punto se realiza la clasificación.
+El Bagging, acrónimo de Bootstrap Agreggation, es un modelo homogéneo donde cada una de las partes aprende en paralelo de forma independiente, para finalmente combinarlos y predecir la clase más frecuente, en el contexto de clasificación, y el promedio, en el caso de regresión. Esta combinación de predicciones logra que disminuya la varianza.
 
-## Criterios de división
+Para ajustar cada uno de los modelos, bagging selecciona una muestra bootstrap (muestreo con reemplazo) de la base original.
 
-¿Cómo segmentamos el espacio de predictores?. Una de las opciones más intuitivas es la de utilizar la tasa de clasificación incorrecta, pero se ha visto que empíricamente esta alternativa no funciona muy bien.
+**Nota**: Los Bosques Aleatorios son un caso especial de Bagging.
 
-Así, entre las propuestas se encuentran dos que son bastante utilizadas: el Índice Gini y la Entropía.
+## Boosting
 
-### Índice Gini
+<center>![Boosting (Créditos: https://towardsdatascience.com/ensemble-methods-bagging-boosting-and-stacking-c9214a10a205)](https://miro.medium.com/max/4800/1*VGSoqefx3Rz5Pws6qpLwOQ@2x.webp)</center>
 
-Dado un conjunto de observaciones $D$ con $p_i$ la proporción de ellas que pertenecen a la i-ésima clase, se define el **Índice de Gini** como
+El Boosting también es un modelo homogéneo, pero que funciona de forma secuencial y adaptativa, esto es, cada modelo adicional busca corregir los errores del modelo anterior.
 
-$$
-\begin{equation*}
-  \text{Gini}(D) = 1 - \sum_{i=1}^m p_i^2
-\end{equation*}
-$$
+En particular, existen dos métodos de boosting: Gradient boosting y Adaptive boosting (AdaBoost). Nosotros nos enfocaremos en Gradient Boosting.
 
-### Entropía
+## Stacking
 
-La idea de esta medida es que, si una clase es muy poco común, el saber que una observación dada pertenece a dicha clase entrega mucha información y, de manera equivalente, si una clase es común entonces la pertenencia entrega poca información. En particular, se tiene
+<center>![Stacking (Créditos: https://towardsdatascience.com/ensemble-methods-bagging-boosting-and-stacking-c9214a10a205)](https://miro.medium.com/max/1400/1*ZucZsXkOwrpY2XaPh6teRw@2x.webp)</center>
 
-$$
-\begin{equation*}
-  \text{Entropía}(D) = -\sum_{i=1}^m p_i \log_2 p_i
-\end{equation*}
-$$
-Luego, debemos elegir el atributo que tenga una mayor reducción esperada en entropía, esto es,
+Este método se diferencia de los dos anteriores en que este (casi siempre) considera modelos heterogéneos. Así, en este caso, podemos mezclar modelos diferentes, como por ejemplo un SVM, un KNN y un árbol de decisión.
 
-$$
-\text{Gain}(S, A) = \text{Entropía}(S) - \sum_{v \in A}\frac{|S_v|}{|S|}\text{Entropía}(S_r)
-$$
+Para combinar los resultados, Stacking considera un meta-modelo, al cual se le entregan los resultados de los modelos débiles anteriores.
 
-donde $S$ es el set original, $A$ es algún atributo y $S_r$ es la entropía del sub-grupo $r$ de $A$.
+## ¿Cuándo utilizar cada uno?
 
-## Overfitting
+Dado que los modelos básicos de Bagging se ajustan en paralelo, esta técnica suele utilizarse con modelos de bajo sesgo pero alta variabilidad. Esto es debido a que los modelos de estas características suelen ser mas costosas computacionalmente, así nos aprovechamos de la paralelización.
 
-Uno de los problemas de los árboles de decisión es que fácilmente podemos caer en el problema de overfitting si no nos cuidamos de ajustar un modelo con muchas ramificaciones. Para cuidarnos de lo anterior, existen varias opciones:
-
-* **Poda de un árbol**: Para esto, se introduce un parámetro de complejidad, comúnmente denotado por $\alpha$ o $Cp$. Este parámetro controla el tamaño total del árbol, penalizando por el número total de nodos finales.
-* **Tree Depth**: Controla la máxima profundidad del árbol.
-* **Mínimo n**: Mínimo número de puntos en un nodo requeridos para que el nodo se vuelva a dividir.
+Por otro lado, como Boosting ajusta modelos uno por uno, esta técnica se suele utilizar para modelos de alto sesgo pero baja variabilidad.
 
 
-# Random Forests
+# Ejemplo: Predición de depósitos a largo plazo
 
-La idea de los Bosques Aleatorios es bastante simple, y es que se unen muchos árboles de decisión. Para esto, se entrenan $L$ árboles de decisión, usando en cada caso $N$ datos de entrenamiento, normalmente muestreados con reemplazo. Finalmente, la clasificación está dada por la predicción más común entre los $L$ árboles resultantes (majority vote)
+<center>![Créditos: Bank for Investment and Development of Vietnam (BIDV)](https://static.tapchitaichinh.vn/images/upload/hoangthuviet/01182022/chinh-sach-tai-khoa.jpg){height="500px" width="900px"}</center>
 
-Además, en cada división estos árboles consideran solo un conjunto $m < M$ de atributos disponibles, elegidos de manera aleatoria.
+https://www.kaggle.com/datasets/rashmiranu/banking-dataset-classification?select=new_train.csv
 
-# Búsqueda Iterativa
-
-En las ayudantías anteriores hemos visto dos maneras de búsqueda de hiperparámetros, ambas de la categoría de grillas: grillas regulares y grillas aleatorias.
-
-En esta ayudantía presentaremos una forma diferente de buscar estos valores y es a través de búsqueda iterativa. Estos algoritmos consideran diferentes puntos de partida y va considerando valores cercanos que vayan optimizando la métrica deseada. Así, la diferencia con las grillas regulares es que no fija los valores a buscar al principio del algoritmo, si no que los va considerando en cada iteración.
-
-Podemos ver la diferencia de los tres algoritmos a continuación.
-
-<center>![Búsqueda en grillas regulares. Créditos https://en.wikipedia.org/wiki/Hyperparameter_optimization](https://r4ds.github.io/bookclub-tmwr/images/grid_search-hyperparameter.png){height="500px" width="750px"}</center>
-
-<center>![Búsqueda en grillas aleatorias. Créditos https://en.wikipedia.org/wiki/Hyperparameter_optimization](https://r4ds.github.io/bookclub-tmwr/images/random_search-hyperparameter.png){height="500px" width="750px"}</center>
-
-<center>![Búsqueda iterativa. Créditos https://en.wikipedia.org/wiki/Hyperparameter_optimization](https://r4ds.github.io/bookclub-tmwr/images/bayesian_optimization-hyperparameter.png){height="500px" width="750px"}</center>
-
-Es importante notar que uno de los problemas de este algoritmo es que no podemos asegurar la convergencia a un mínimo/máximo global, sino que solo a locales. De todas maneras, una de las formas de aliviar este problema es considerar diferentes puntos de partida en el espacio de búsqueda.
-
-En particular, tidymodels nos deja realizar optimización bayesiana a través de la función `tune_bayes`.
-
-# Ejemplo: Clasificación de precios de teléfonos
-
-<center>![Créditos: The Verge](https://cdn0.vox-cdn.com/thumbor/QH2zaur_qnCJUmxY6FBpsgU-hoo=/0x1080/volume-assets.voxmedia.com/production/97b73cbb0cf93288fd8a8b28034fbb4b/bigpic_money.jpg){height="500px" width="900px"}</center>
 
 Harto del número reducido de empresas de teléfonos celulares, usted decide iniciar su propia compañía que logre competir con las diferentes empresas globales importantes.
 

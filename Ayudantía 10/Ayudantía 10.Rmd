@@ -1,0 +1,240 @@
+---
+title: "Ayudantía 10 - ML para Negocios &#129504;"
+date: "16 de noviembre del 2022"
+output:
+  html_document:
+    df_print: paged
+    theme: flatly
+    highlight: breezedark
+    toc: yes
+    toc_float: yes
+---
+
+```{=html}
+<style type="text/css">
+/* Whole document: */
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible&display=swap');
+body{
+  font-family: 'Atkinson Hyperlegible', sans-serif;
+  font-size: 15pt;
+  background-color: #f2f3ed;
+	
+}
+/* Headers */
+h1,h2,h3,h4,h5,h6{
+  font-size: 20pt;
+ font-color:#03DAC6; 
+}
+
+div.main-container {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+```
+
+```{r setup, include=FALSE, message=FALSE}
+library(here)
+
+
+## Global options
+knitr::opts_chunk$set(
+  cache = TRUE, fig.align = "center",
+  fig.height = 7, fig.width = 12
+)
+
+# Here
+here::i_am("Ayudantía 10/Ayudantía 10.Rmd")
+```
+
+# Introducción
+
+Bienvenid\@s a la décima (y última) ayudantía de EAA3707 - Machine Learning para Negocios. En esta ayudantía veremos cosas básicas de Redes Neuronales.
+
+Antes de comenzar, cargamos las librerías que utilizaremos durante la ayudantía.
+
+```{r librerias, message=FALSE, warning=FALSE}
+library(here)
+library(beepr)
+library(tidyverse)
+library(tidymodels)
+library(patchwork)
+library(skimr)
+library(corrplot)
+
+
+# Para obtener resultados reproducibles
+set.seed(219)
+```
+
+**CAMBIAR** Ocupamos las siguientes librerías nuevas:
+
+*   `doParallel`: permite ajustar modelos de manera paralela. Ojo con el número de núcleos a utilizar.
+*   `skimr`: permite echar fácilmente un vistazo inicial a los datos.
+*   `baguette`: necesario para poder ajustar un modelo de ensamble tipo Bagging.
+*   `xgboost`: uno de los motores que acepta `parsnip` para ajustar modelos de ensamble tipo Boosting.
+
+Les recuerdo los libros que les recomiendo para aprender de R:
+
+-   **Hands-On Programming with R**: disponible [acá](https://rstudio-education.github.io/hopr/). Útil para recordar cosas básicas de R.
+
+-   **Advanced R**: disponible [acá](https://adv-r.hadley.nz/). Para aprender R avanzado (realmente avanzado), si es que están interesados en entender cómo funciona R por detrás.
+
+-   **R for Data Science**: disponible [acá](https://r4ds.had.co.nz/). Bueno para aprender y aplicar Data Science de manera rápida, además de ser uno de los libros guía para aprender acerca de los paquetes de tidyverse.
+
+-   **RMarkdown Cookbook**: disponible [acá](https://bookdown.org/yihui/rmarkdown-cookbook/). Útil para aprender lo básico de RMarkdown.
+
+-   **RMarkdown: The Definitive Guide**: disponible [acá](https://bookdown.org/yihui/rmarkdown/). Útil para aprender cosas avanzadas de RMarkdown.
+
+-   **Tidy Modeling with R**: disponible [acá](https://www.tmwr.org/). Recomendado para aprender del ecosistema tidymodels. Tiene también un capítulo pequeño de tidyverse con lo justo y necesario.
+
+# Redes Neuronales
+
+<center>![Métodos de ensamble - Créditos Kristina Grigaitytė, Turing College](https://blog.turingcollege.com/content/images/2021/10/Ensemble-learning.png){height="500px" width="750px"}</center>
+
+Como vieron en clases, los métodos de ensamble ayudan a mejorar los resultados de modelos de Machine Learning, mediante la combinación de varios modelos, generando modelos de predicción robustos. Estos métodos pueden ser utilizados con cualquier modelo, pero generalmente se trabaja con árboles de decisión.
+
+En la ayudantía veremos dos métodos: Bagging, Boosting.
+
+## Bagging
+
+<center>![Bagging (Créditos: https://towardsdatascience.com/ensemble-methods-bagging-boosting-and-stacking-c9214a10a205)](https://miro.medium.com/max/4800/1*zAMhmZ78a6V9W878zfk5eA@2x.webp)</center>
+
+El Bagging, acrónimo de Bootstrap Agreggation, es un modelo homogéneo donde cada una de las partes aprende en paralelo de forma independiente, para finalmente combinarlos y predecir la clase más frecuente, en el contexto de clasificación, y el promedio, en el caso de regresión. Esta combinación de predicciones logra que disminuya la varianza.
+
+Para ajustar cada uno de los modelos, bagging selecciona una muestra bootstrap (muestreo con reemplazo) de la base original.
+
+**Nota**: Los Bosques Aleatorios son un caso especial de Bagging.
+
+## Boosting
+
+<center>![Boosting (Créditos: https://towardsdatascience.com/ensemble-methods-bagging-boosting-and-stacking-c9214a10a205)](https://miro.medium.com/max/4800/1*VGSoqefx3Rz5Pws6qpLwOQ@2x.webp)</center>
+
+El Boosting también es un modelo homogéneo, pero que funciona de forma secuencial y adaptativa, esto es, cada modelo adicional busca corregir los errores del modelo anterior.
+
+En particular, existen dos métodos de boosting: Gradient boosting y Adaptive boosting (AdaBoost). Nosotros nos enfocaremos en Gradient Boosting.
+
+## Extra: Stacking
+
+<center>![Stacking (Créditos: https://towardsdatascience.com/ensemble-methods-bagging-boosting-and-stacking-c9214a10a205)](https://miro.medium.com/max/1400/1*ZucZsXkOwrpY2XaPh6teRw@2x.webp)</center>
+
+Este método se diferencia de los dos anteriores en que este (casi siempre) considera modelos heterogéneos. Así, en este caso, podemos mezclar modelos diferentes, como por ejemplo un SVM, un KNN y un árbol de decisión.
+
+Para combinar los resultados, Stacking considera un meta-modelo, al cual se le entregan los resultados de los modelos débiles anteriores.
+
+## ¿Cuándo utilizar cada uno?
+
+Dado que los modelos básicos de Bagging se ajustan en paralelo, esta técnica suele utilizarse con modelos de bajo sesgo pero alta variabilidad. Esto es debido a que los modelos de estas características suelen ser mas costosas computacionalmente, así nos aprovechamos de la paralelización.
+
+Por otro lado, como Boosting ajusta modelos uno por uno, esta técnica se suele utilizar para modelos de alto sesgo pero baja variabilidad.
+
+
+# Ejemplo: Predición de depósitos a largo plazo
+
+<center>![Créditos: Bank for Investment and Development of Vietnam (BIDV)](https://static.tapchitaichinh.vn/images/upload/hoangthuviet/01182022/chinh-sach-tai-khoa.jpg){height="500px" width="900px"}</center>
+
+Últimamente, ha habido una disminución en los ingresos del Banco de Portugal, por lo que les gustaría saber qué acciones tomar. Después de diferentes estudios, logran descubrir que la causa principal es que los clientes no están invirtiendo lo suficiente en depósitos a largo plazo. Por esta razón, al banco le gustaría identificar a los clientes que tienen una mayor probabilidad de suscribirse a un depósito a largo plazo, para así centrar los esfuerzos de marketing en aquellos clientes.
+
+Para ajustar el modelo, le han entregado la base de datos `banking.csv`, que contiene información de diferentes clientes que fueron contactados vía telefónica para ofrecer depósitos a largo plazo. Entre las variables se encuentran:
+
+* **age**: edad del cliente
+* **job**: tipo de trabajo
+* **marital**: estado civil del cliente
+* **education**: nivel educacional
+* **default**: si el cliente tiene crédito sin pagar
+* **housing**: si el cliente tiene un préstamo de vivienda
+* **loan**: si el cliente tiene un préstamo personal
+* **contact**: canal de comunicación
+* **day_of_week**: día del último contacto
+* **duration**: duración del último contacto, en segundos
+* **campaing**: número de contactos durante la campaña
+* **pdays**: número de días que transcurrieron desde la última campaña (999 significa que no ha sido contactado anteriormente)
+* **previous**: número de contactos antes de la campaña
+* **poutcome**": resultado de la campaña pasada
+* **y**: variable respuesta que indica si el cliente realizó un depósito a largo plazo.
+
+Es importante el hecho que los datos faltantes están marcados como "unknown", por lo que debemos trabajarlos acordemente.
+
+## Análisis exploratorio
+
+Importemos en primer lugar nuestros datos y demos un primer vistazo inicial.
+
+```{r carga datos}
+# Cargamos los datos (notar na = "unknown")
+banking_unclean <- readr::read_csv(here("Ayudantía 9", "banking.csv"), na = "unknown",
+                                   show_col_types = FALSE)
+
+# Damos un vistazo
+skimr::skim(banking_unclean)
+```
+
+Notamos dos cosas importantes. En primer lugar, las variables que debiesen ser factores aparecen como variables de tipo string, por lo que debemos cambiarlas. Por otro lado, también notamos un alto número de observaciones faltantes.
+
+Como no conocemos aún técnicas para trabajar con datos faltantes, simplemente las eliminaremos de la base de datos. Por otro lado, para simplificar el trabajo, eliminaremos la variable `pdays`.
+
+```{r cambio a factor}
+banking <- banking_unclean %>% 
+  na.omit() %>% 
+  dplyr::select(-pdays) %>% 
+  dplyr::mutate(
+    job = factor(job),
+    marital = factor(marital),
+    education = factor(education),
+    default = factor(default, levels=c("yes", "no"), labels=c("Yes", "No")),
+    housing = factor(housing, levels=c("yes", "no"), labels=c("Yes", "No")),
+    loan = factor(loan, levels=c("yes", "no"), labels=c("Yes", "No")),
+    contact = factor(contact),
+    month = factor(month, 
+                   levels=c("jan", "feb", "mar", "apr", "may", "jun", "jul",
+                              "aug", "sep", "oct", "nov", "dec"),
+                   ordered=TRUE),
+    day_of_week = factor(day_of_week,
+                         levels=c("mon", "tue", "wed", "thu", "fri"),
+                         ordered=TRUE),
+    poutcome = factor(poutcome),
+    y = factor(y, levels=c("yes", "no"), labels=c("Yes", "No")))
+
+skimr::skim(banking)
+```
+
+Así, tenemos 4 variables numéricas y 11 categóricas, incluyendo la variable respuesta. Notamos que en este caso la proporción de clientes que realizó un depósito a plazo es de un 12.6\%
+
+Como análisis exploratorio, podemos ver en primer lugar la correlación entre las variables númericas presentes en la base de datos.
+
+```{r correlacion, echo=FALSE}
+banking %>% 
+  select_if(is.numeric) %>% 
+  cor() %>% 
+  corrplot::corrplot()
+```
+
+Notamos que existe una baja correlación.
+
+```{r boxplots, echo=FALSE}
+p1 <- ggplot(banking, mapping = aes(x = y, y = age, fill = y)) +
+  geom_boxplot() +
+  labs(title = "Relación entre la edad y depósito a plazo",
+       x = "Depósito a plazo", y = "Edad")
+
+p2 <- ggplot(banking, mapping = aes(x = y, y = duration, fill = y)) +
+  geom_boxplot() +
+  labs(title = "Relación entre la duración de la llamada y depósito a plazo",
+       x = "Depósito a plazo", y = "Edad")
+
+p1 + p2
+```
+
+Antes de pasar al modelamiento con Bagging y Boosting, realizamos la división de los datos que será común a ambos.
+
+```{r data split}
+banking_split <- rsample::initial_split(
+  data = banking,
+  strata = y
+)
+
+bnk_train <- rsample::training(banking_split)
+bnk_test <- rsample::testing(banking_split)
+bnk_cv <- rsample::vfold_cv(bnk_train, v = 5, strata = y)
+```
+
